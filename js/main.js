@@ -148,6 +148,16 @@ function continueAfterResults() {
 
 // ─── Bracket Flow ─────────────────────────────────────────────────────────────
 
+function showBracketContinueBtn() {
+  const btn = document.getElementById('btn-bracket-continue');
+  if (btn) btn.style.display = '';
+}
+
+function hideBracketContinueBtn() {
+  const btn = document.getElementById('btn-bracket-continue');
+  if (btn) btn.style.display = 'none';
+}
+
 function startBracket() {
   initBracket(G);
   G.phase = 'bracket';
@@ -164,7 +174,7 @@ function startBracket() {
     return;
   }
 
-  setTimeout(() => enterBracketShop(), 3500);
+  showBracketContinueBtn();
 }
 
 function enterBracketShop() {
@@ -218,10 +228,10 @@ function handleBracketContinue() {
     return;
   }
 
-  // More bracket rounds remain
+  // More bracket rounds remain — show bracket, wait for button click
   showScreen('screen-bracket');
   renderBracket(G);
-  setTimeout(() => enterBracketShop(), 3000);
+  showBracketContinueBtn();
 }
 
 // ─── Shop Handlers ────────────────────────────────────────────────────────────
@@ -369,6 +379,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tab === 'standings') renderStandings(G);
       if (tab === 'shop')      renderShop(G);
     });
+  });
+
+  // Bracket continue button
+  document.getElementById('btn-bracket-continue')?.addEventListener('click', () => {
+    hideBracketContinueBtn();
+    enterBracketShop();
   });
 
   // Match screen

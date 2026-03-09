@@ -24,7 +24,7 @@
 
 /* ─── Reset ─────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;overscroll-behavior:none;}
 h1,h2,h3{color:var(--text-hi);}
 button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:var(--panel);} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
