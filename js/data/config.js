@@ -36,7 +36,7 @@ const CONFIG = {
   TIER_ODDS: {
     1: [75, 25,  0,  0,  0],  // Only Iron/Silver
     2: [50, 35, 15,  0,  0],  // Mostly Iron/Silver, some Gold
-    3: [20, 38, 35,  7,  0],  // Gold focus, barely any Platinum, no Diamond
+    3: [26, 38, 29, 7, 0],  // Gold focus, barely any Platinum, no Diamond
     4: [ 8, 24, 40, 24,  4],  // Gold/Platinum mix
     5: [ 2, 14, 36, 34, 14],  // Platinum focus, Diamond available
     6: [ 0,  6, 24, 42, 28],  // Platinum/Diamond

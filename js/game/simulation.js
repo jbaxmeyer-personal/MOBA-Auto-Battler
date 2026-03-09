@@ -307,25 +307,32 @@ function simulateMidGame(blue, red, bR, rR, advIn, events, tally) {
 }
 
 // ─── Late Game (26+ min) ──────────────────────────────────────────────────────
+// All event times use a sequential clock so causality is preserved:
+// no event can appear before the event that caused it.
 
 function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally) {
   let adv = advIn;
-
   const objectiveRating = (r) => r.lateRating * 0.55 + r.tfRating * 0.45;
 
+  // Running clock — each section advances t forward
+  let t = 26;
+
   // Dragon 3 (26–30 min)
+  t += randInt(0, 4);
+  const d3Min  = t;
   const d3Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
   const d3Type = drakes[dIdx] || drakes[0];
   recordObj(tally, 'dragon', d3Blue);
   adv = clamp(adv + (d3Blue ? 5 : -5), 5, 95);
   const d3Soul = tally.blue.dragons >= 4 ? '🔥 DRAGON SOUL — Blue side is unstoppable!'
                : tally.red.dragons  >= 4 ? '🔥 DRAGON SOUL — Red side is unstoppable!' : '';
-  events.push({ time: padTime(randInt(26,30), randInt(0,59)),
+  events.push({ time: padTime(d3Min, randInt(0,59)),
     text: `🐉 ${d3Type} Dragon secured by ${d3Blue ? 'blue' : 'red'} side. ${d3Soul}`,
     type: 'objective', phase: 'lategame', dragonBlue: d3Blue, advAfter: adv, goldDiff: tally.goldDiff });
 
-  // Baron Nashor (28–33 min)
-  const baronMin  = randInt(28, 33);
+  // Baron Nashor (≥28 min, at least 2 min after dragon 3)
+  t = Math.max(28, d3Min + randInt(2, 4));
+  const baronMin  = t;
   const baronBlue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
   let baronWinner;
 
@@ -347,21 +354,24 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
       type: 'objective', phase: 'lategame', baronBlue: baronWinner, advAfter: adv, goldDiff: tally.goldDiff });
   }
 
-  // Dragon 4 (30–34 min) — only in non-stomp games
-  if (adv > 20 && adv < 80) {
+  // Dragon 4 (4–6 min after d3, only in non-stomp games)
+  const d4Min = d3Min + randInt(4, 6);
+  if (adv > 25 && adv < 75) {
     const d4Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
     const d4Type = drakes[(dIdx + 1) % drakes.length];
     recordObj(tally, 'dragon', d4Blue);
     adv = clamp(adv + (d4Blue ? 4 : -4), 5, 95);
     const soulSide = tally.blue.dragons >= 4 ? 'blue' : tally.red.dragons >= 4 ? 'red' : null;
     const soulText = soulSide ? ` 🔥 DRAGON SOUL — ${soulSide === 'blue' ? 'Blue' : 'Red'} side is now empowered!` : '';
-    events.push({ time: padTime(randInt(30,34), randInt(0,59)),
+    events.push({ time: padTime(d4Min, randInt(0,59)),
       text: `🐉 ${d4Type} Dragon to ${d4Blue ? 'blue' : 'red'} side.${soulText}`,
       type: 'objective', phase: 'lategame', dragonBlue: d4Blue, advAfter: adv, goldDiff: tally.goldDiff });
   }
 
-  // Baron push teamfight (31–36 min)
-  const pushBlue  = blueWinsEvent(
+  // Baron push teamfight (2–4 min after baron)
+  t = baronMin + randInt(2, 4);
+  const pushMin  = t;
+  const pushBlue = blueWinsEvent(
     bR.tfRating + (baronWinner ? 18 : 0),
     rR.tfRating + (!baronWinner ? 18 : 0),
     bR.consistency, rR.consistency
@@ -372,24 +382,28 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
   const inhibLane = ['top', 'mid', 'bot'][randInt(0,2)];
   for (let i = 0; i < pushKills; i++) recordKill(tally, pushBlue ? 'blue' : 'red', pushBlue ? 'red' : 'blue');
   for (let i = 0; i < pushLoss;  i++) recordKill(tally, pushBlue ? 'red' : 'blue', pushBlue ? 'blue' : 'red');
-  events.push({ time: padTime(randInt(31,36), randInt(0,59)),
+  events.push({ time: padTime(pushMin, randInt(0,59)),
     text: `💥 ${pushBlue?'Blue':'Red'} side uses Baron buff to win ${pushKills}-for-${pushLoss} — ${inhibLane} inhibitor falls!`,
     type: 'teamfight', phase: 'lategame', tfBlueKills: pushBlue ? pushKills : pushLoss, tfRedKills: pushBlue ? pushLoss : pushKills, advAfter: adv, goldDiff: tally.goldDiff });
 
-  // Second Baron for long games (36–40 min)
-  if (adv > 38 && adv < 62) {
+  // Second Baron — only in very close games (43–57), exactly 6 min after first, before the final fight
+  const secondBaronMin = baronMin + 6;
+  if (adv > 43 && adv < 57) {
+    t = secondBaronMin;
     const b2Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
     adv = clamp(adv + (b2Blue ? 8 : -8), 5, 95);
     recordObj(tally, 'baron', b2Blue);
-    events.push({ time: padTime(randInt(36,40), randInt(0,59)),
+    events.push({ time: padTime(t, randInt(0,59)),
       text: `🟣 Second BARON NASHOR spawns — ${b2Blue ? 'blue' : 'red'} side contests and secures it!`,
       type: 'objective', phase: 'lategame', baronBlue: b2Blue, advAfter: adv, goldDiff: tally.goldDiff });
   }
 
-  // Final teamfight / Nexus push (36–44 min)
-  const finalBlue = blueWinsEvent(bR.lateRating, rR.lateRating, bR.consistency, rR.consistency);
-  const comebackSide = !finalBlue;
-  const clutchRating = comebackSide ? bR.clutchRating : rR.clutchRating;
+  // Final teamfight — 2–4 min after last major event (push or second baron)
+  t += randInt(2, 4);
+  const finalTFMin      = t;
+  const finalBlue       = blueWinsEvent(bR.lateRating, rR.lateRating, bR.consistency, rR.consistency);
+  const comebackSide    = !finalBlue;
+  const clutchRating    = comebackSide ? bR.clutchRating : rR.clutchRating;
   const comebackHappens = chance(clamp((clutchRating - 60) * 0.7, 4, 24));
 
   let blueWins;
@@ -397,9 +411,8 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
     blueWins = comebackSide;
     const hero = playerWithChamp(blueWins ? blue : red, ['mid','adc','jungle'][randInt(0,2)]);
     adv = clamp(adv + (blueWins ? 15 : -15), 5, 95);
-    // Ace: 5 kills for comeback side
     for (let i = 0; i < 5; i++) recordKill(tally, blueWins ? 'blue' : 'red', blueWins ? 'red' : 'blue');
-    events.push({ time: padTime(randInt(36,40), randInt(0,59)),
+    events.push({ time: padTime(finalTFMin, randInt(0,59)),
       text: `🔥 CLUTCH COMEBACK! ${hero} makes an INSANE outplay — ${blueWins ? 'Blue' : 'Red'} side turns the fight around! ACE!`,
       type: 'teamfight', phase: 'lategame', tfBlueKills: blueWins ? 5 : 0, tfRedKills: blueWins ? 0 : 5, advAfter: adv, goldDiff: tally.goldDiff });
   } else {
@@ -410,13 +423,13 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
     adv = clamp(adv + (blueWins ? finalKills * 1.5 : -finalKills * 1.5), 5, 95);
     for (let i = 0; i < finalKills; i++) recordKill(tally, blueWins ? 'blue' : 'red', blueWins ? 'red' : 'blue');
     for (let i = 0; i < finalLoss;  i++) recordKill(tally, blueWins ? 'red' : 'blue', blueWins ? 'blue' : 'red');
-    events.push({ time: padTime(randInt(36,44), randInt(0,59)),
+    events.push({ time: padTime(finalTFMin, randInt(0,59)),
       text: `💥 Final teamfight — ${blueWins ? 'Blue' : 'Red'} side wins ${finalKills}-for-${finalLoss}! ${mvp} absolutely pops off — the base is open!`,
       type: 'teamfight', phase: 'lategame', tfBlueKills: blueWins ? finalKills : finalLoss, tfRedKills: blueWins ? finalLoss : finalKills, advAfter: adv, goldDiff: tally.goldDiff });
   }
 
-  // Nexus
-  const nexusMin = randInt(38, 48);
+  // Nexus falls 1–3 min after the final fight — always, no exceptions
+  const nexusMin = finalTFMin + randInt(1, 3);
   events.push({ time: padTime(nexusMin, randInt(0,59)),
     text: `🏆 NEXUS DESTROYED! ${blueWins ? 'Blue' : 'Red'} side wins the match!`,
     type: 'result', phase: 'lategame', advAfter: adv, goldDiff: tally.goldDiff });
@@ -456,7 +469,7 @@ function simulateMatch(blueTeam, redTeam, blueTeamName, redTeamName) {
     lateEvents.push({ time: padTime(earlyMin, 0), text: `🏆 EARLY SURRENDER! ${earlyWin ? blueTeamName : redTeamName} completely dominates — GG WP!`, type: 'result', phase: 'lategame', goldDiff: tally.goldDiff });
 
     // CS gold for short game
-    const csPerMin = 175;
+    const csPerMin = 700;
     tally.blue.gold += Math.round(earlyMin * csPerMin * (earlyWin ? 0.55 : 0.45));
     tally.red.gold  += Math.round(earlyMin * csPerMin * (earlyWin ? 0.45 : 0.55));
 
@@ -474,7 +487,7 @@ function simulateMatch(blueTeam, redTeam, blueTeamName, redTeamName) {
   // CS gold estimate based on game length
   const nexusEv  = lateEvents.find(e => e.type === 'result');
   const gameMin  = nexusEv ? (parseInt(nexusEv.time) || 35) : 35;
-  const csPerMin = 175;
+  const csPerMin = 700;
   tally.blue.gold += Math.round(gameMin * csPerMin * (blueWins ? 0.52 : 0.48));
   tally.red.gold  += Math.round(gameMin * csPerMin * (blueWins ? 0.48 : 0.52));
 

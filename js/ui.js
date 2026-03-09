@@ -345,6 +345,41 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
   setText('score-red-dragons', '🐉0');
   setText('score-red-towers', '🏰0');
 
+  // Reset gold chart
+  const goldSvg = document.getElementById('gold-chart-svg');
+  if (goldSvg) goldSvg.innerHTML = '';
+  const goldTotals = document.getElementById('gold-totals');
+  if (goldTotals) goldTotals.style.display = 'none';
+  const _goldPoints = [0]; // goldDiff values per event, starts at 0
+
+  function redrawGoldChart() {
+    if (!goldSvg) return;
+    const W = goldSvg.clientWidth || 420;
+    const H = 64;
+    const cy = H / 2;
+    const MAX = 12000;
+    const pts = _goldPoints;
+    if (pts.length < 2) { goldSvg.innerHTML = ''; return; }
+    const xs = (i) => (i / (pts.length - 1)) * W;
+    const ys = (v) => cy - clamp(v / MAX, -1, 1) * (cy - 4);
+    // Build polyline points string
+    let lineStr = '', blueStr = `0,${cy} `, redStr = `0,${cy} `;
+    pts.forEach((v, i) => {
+      const x = xs(i).toFixed(1), y = ys(v).toFixed(1);
+      lineStr += `${x},${y} `;
+      blueStr += `${x},${Math.min(parseFloat(y), cy).toFixed(1)} `;
+      redStr  += `${x},${Math.max(parseFloat(y), cy).toFixed(1)} `;
+    });
+    const lastX = xs(pts.length - 1).toFixed(1);
+    blueStr += `${lastX},${cy}`;
+    redStr  += `${lastX},${cy}`;
+    goldSvg.innerHTML = `
+      <line x1="0" y1="${cy}" x2="${W}" y2="${cy}" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+      <polygon points="${blueStr}" fill="rgba(79,195,247,0.22)"/>
+      <polygon points="${redStr}"  fill="rgba(255,123,123,0.22)"/>
+      <polyline points="${lineStr}" fill="none" stroke="${_goldPoints[_goldPoints.length-1] >= 0 ? '#4fc3f7' : '#ff7b7b'}" stroke-width="1.5" stroke-linejoin="round"/>`;
+  }
+
   // Set advantage fill to 50% (neutral start)
   const fill = document.getElementById('advantage-fill');
   if (fill) { fill.style.transition = 'none'; fill.style.width = '50%'; }
@@ -403,16 +438,10 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
       }
     }
 
-    // Gold tug bar: shift based on running gold differential from event
+    // Gold chart: add point and redraw
     if (ev.goldDiff !== undefined) {
-      const MAX_DIFF = 15000;
-      const pct = clamp(50 + (ev.goldDiff / MAX_DIFF) * 50, 5, 95);
-      const goldFill = document.getElementById('gold-tug-fill');
-      if (goldFill) {
-        goldFill.style.transition = 'left 0.6s ease, right 0.6s ease';
-        if (pct >= 50) { goldFill.style.left = `${100 - pct}%`; goldFill.style.right = '0'; goldFill.style.background = 'linear-gradient(90deg,#1a3a6a,#4fc3f7)'; }
-        else           { goldFill.style.left = '0'; goldFill.style.right = `${pct}%`; goldFill.style.background = 'linear-gradient(90deg,#ff7b7b,#6a1a1a)'; }
-      }
+      _goldPoints.push(ev.goldDiff);
+      redrawGoldChart();
     }
   }
 
@@ -468,16 +497,18 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
     if (skipBtn) skipBtn.style.display = 'none';
     // Show final canonical stats in score bar
     updateScoreBar(matchResult);
-    // Show final gold totals
+    // Show final gold totals only if realistic (both teams earned meaningful CS gold)
     const gt = document.getElementById('gold-totals');
     const gbt = document.getElementById('gold-blue-total');
     const grt = document.getElementById('gold-red-total');
     if (gt && gbt && grt && matchResult.stats) {
       const bg = matchResult.stats.blue.gold;
       const rg = matchResult.stats.red.gold;
-      gbt.textContent = `💰 Blue: ${(bg/1000).toFixed(1)}k`;
-      grt.textContent = `💰 Red: ${(rg/1000).toFixed(1)}k`;
-      gt.style.display = 'flex';
+      if (bg > 15000 && rg > 15000) {
+        gbt.textContent = `💰 Blue: ${(bg/1000).toFixed(1)}k`;
+        grt.textContent = `Red: ${(rg/1000).toFixed(1)}k 💰`;
+        gt.style.display = 'flex';
+      }
     }
     // Apply result and show inline results
     applyMatchResultAndShowInline();
