@@ -93,7 +93,7 @@ function playerCardHTML(player, ctx, extra = {}) {
   }
 
   return `
-    <div class="player-card tier-${player.tier}${isSelected?' selected':''}" style="border-color:${color}">
+    <div class="player-card tier-${player.tier}${isSelected?' selected':''}${extra.owned?' owned':''}" style="border-color:${color}">
       <div class="card-top" style="background:${color}18">
         <span class="card-pos">${posIcon(player.position)}</span>
         <span class="card-name">${player.name}${starBadge(player.stars)}</span>
@@ -115,8 +115,12 @@ function renderShop(state) {
   // Shop slots
   const shopEl = document.getElementById('shop-slots');
   if (shopEl) {
+    const ownedNames = new Set([
+      ...state.roster.filter(Boolean).map(p => p.name),
+      ...state.bench.filter(Boolean).map(p => p.name),
+    ]);
     shopEl.innerHTML = state.shopSlots.map((p, i) =>
-      p ? playerCardHTML(p, 'shop', { shopIndex: i })
+      p ? playerCardHTML(p, 'shop', { shopIndex: i, owned: ownedNames.has(p.name) })
         : `<div class="player-card empty"><span class="empty-label">—</span></div>`
     ).join('');
   }

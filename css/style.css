@@ -118,6 +118,7 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .player-card.empty{align-items:center;justify-content:center;min-height:80px;border-style:dashed;opacity:.35;}
 .player-card.locked{align-items:center;justify-content:center;min-height:60px;opacity:.2;border-style:dashed;}
 .player-card.selected{box-shadow:0 0 0 2px var(--gold);border-color:var(--gold);}
+.player-card.owned{box-shadow:0 0 0 2px #4fc3f7 inset;opacity:.75;}
 .empty-label{color:var(--text-dim);font-size:12px;}
 
 .tier-2{border-color:var(--t2);}
