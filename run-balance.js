@@ -48,18 +48,18 @@ function writeFile(p, src) { fs.writeFileSync(p, src, 'utf8'); }
 // ─── Balance adjusters ────────────────────────────────────────────────────────
 
 /**
- * Adjust the blueWinsEvent scaling factor.
- * Formula: const raw = clamp(50 + diff * X, 15, 85)
- * X controls how much rating difference affects win chance.
- * Lower X = more random = smaller teams can beat better ones = helps weaker bot win more.
- * Higher X = skill gap matters more.
+ * Adjust the fight resolution scaling factor (v3 sim engine).
+ * Formula: clamp(50 + (blueEff - redEff) * X, 12, 88)
+ * X controls how much effective-rating difference affects win chance.
+ * Lower X = more random = upsets more common = human wins more from variance.
+ * Higher X = skill gap matters more = favoured team wins more consistently.
  *
- * When wins are LOW (< 6.5): decrease X to flatten outcomes (bot catches up to AI)
- * When wins are HIGH (> 7.5): increase X to make skill matter more
+ * When wins are LOW (< 6.5): decrease X (flatten outcomes → human wins more)
+ * When wins are HIGH (> 7.5): increase X (skill matters more → human wins fewer)
  */
 function adjustWinFactor(analysis) {
   const src   = readFile(SIM_PATH);
-  const match = src.match(/clamp\(50 \+ diff \* ([\d.]+),\s*15,\s*85\)/);
+  const match = src.match(/clamp\(50 \+ diff \* ([\d.]+),\s*12,\s*88\)/);
   if (!match) { console.log('  [balance] WARN: win factor pattern not found'); return; }
 
   let factor = parseFloat(match[1]);
@@ -67,18 +67,18 @@ function adjustWinFactor(analysis) {
 
   if (avgWins >= TARGETS.avgWins.lo && avgWins <= TARGETS.avgWins.hi) return;
 
-  // Too few wins → lower factor (flatten outcomes → bot wins more from luck)
-  // Too many wins → raise factor (skill matters more → bot wins fewer against strong AI)
-  const delta = avgWins < TARGETS.avgWins.lo ? -0.05 : 0.05;
+  // Too few wins → lower factor (flatten outcomes → human wins more from variance)
+  // Too many wins → raise factor (skill matters more)
+  const delta = avgWins < TARGETS.avgWins.lo ? -0.02 : 0.02;
   const newFactor = Math.round(
-    Math.min(1.0, Math.max(0.2, factor + delta)) * 100
+    Math.min(0.60, Math.max(0.10, factor + delta)) * 100
   ) / 100;
 
   if (newFactor === factor) return;
 
   const newSrc = src.replace(
-    /clamp\(50 \+ diff \* [\d.]+,\s*15,\s*85\)/,
-    `clamp(50 + diff * ${newFactor}, 15, 85)`
+    /clamp\(50 \+ diff \* [\d.]+,\s*12,\s*88\)/,
+    `clamp(50 + diff * ${newFactor}, 12, 88)`
   );
   writeFile(SIM_PATH, newSrc);
   const msg = `Win factor: ${factor} → ${newFactor} [avgWins ${avgWins} → target 6.5-7.5]`;
@@ -87,92 +87,67 @@ function adjustWinFactor(analysis) {
 }
 
 /**
- * Adjust the 4th dragon threshold.
- * Pattern: if (adv > X && adv < Y) { // dragon 4
- * Wider window = more 4th dragon fires = higher dragon avg
- * Narrower = fewer
- * Target: keep dragons in 3.0-4.0 range
+ * Adjust dragon 4 timing cutoff (v3 sim engine).
+ * Pattern: if (state.t < X) { // dragon 4 fires if game < X minutes
+ * Higher X = 4th dragon fires in more games = higher dragon avg
+ * Lower X = fewer 4th dragons
+ * Target: dragons in 4.0-5.0 range
  */
 function adjustDragonThreshold(analysis) {
-  const src   = readFile(SIM_PATH);
-  // Match the d4 condition: if (adv > 20 && adv < 80) {
-  const match = src.match(/if \(adv > (\d+) && adv < (\d+)\) \{ \/\/ only in non-stomp/);
+  const src = readFile(SIM_PATH);
+  const match = src.match(/if \(state\.t < (\d+)\) \{[\s\S]{0,20}\/\/ dragon 4/);
   if (!match) {
-    // Try alternate pattern
-    const match2 = src.match(/if \(adv > (\d+) && adv < (\d+)\)/);
-    if (!match2) { console.log('  [balance] WARN: d4 threshold pattern not found'); return; }
+    // Also try pattern without comment
+    const m2 = src.match(/Dragon 4.*\n.*if \(state\.t < (\d+)\)/);
+    if (!m2) { console.log('  [balance] WARN: d4 threshold pattern not found'); return; }
   }
 
-  const m = src.match(/if \(adv > (\d+) && adv < (\d+)\)/);
-  if (!m) return;
+  const m = src.match(/if \(state\.t < (\d+)\) \{/);
+  if (!m) { console.log('  [balance] WARN: d4 threshold pattern not found'); return; }
 
-  let lo = parseInt(m[1]);
-  let hi = parseInt(m[2]);
-  const diff = analysis.avgDragons - 3.5; // aim for middle of range
+  let cutoff = parseInt(m[1]);
+  const diff = analysis.avgDragons - 4.5; // aim for middle of 4.0-5.0 range
 
   if (Math.abs(diff) < 0.3) return;
 
-  // Too high → narrow window (raise lo or lower hi)
-  // Too low → widen window
-  if (diff > 0) {
-    lo = Math.min(35, lo + 5);
-    hi = Math.max(65, hi - 5);
-  } else {
-    lo = Math.max(10, lo - 5);
-    hi = Math.min(90, hi + 5);
-  }
+  // Too many dragons → lower cutoff (fewer 4th drakes fire)
+  // Too few → raise cutoff
+  cutoff = diff > 0 ? Math.max(28, cutoff - 2) : Math.min(38, cutoff + 2);
 
-  const newSrc = src.replace(
-    /if \(adv > \d+ && adv < \d+\)/,
-    `if (adv > ${lo} && adv < ${hi})`
-  );
+  const newSrc = src.replace(/if \(state\.t < \d+\) \{/, `if (state.t < ${cutoff}) {`);
   writeFile(SIM_PATH, newSrc);
-  const msg = `Dragon d4 threshold: >${m[1]}&&<${m[2]} → >${lo}&&<${hi} [avg drakes ${analysis.avgDragons} → target 3.0-4.0]`;
+  const msg = `Dragon d4 cutoff: <${m[1]}min → <${cutoff}min [avg drakes ${analysis.avgDragons} → target 4.0-5.0]`;
   changeLog.push(msg);
   console.log(`  [balance] ${msg}`);
 }
 
 /**
- * Adjust the 2nd baron threshold.
- * Pattern: if (adv > 38 && adv < 62) {  // second baron
- * Wider = more 2nd barons = higher baron avg
+ * Adjust 2nd baron map-closeness threshold (v3 sim engine).
+ * Pattern: Math.abs(state.mapAdvantage - 50) < X  // canSecondBaron
+ * Higher X = wider window = 2nd baron fires in more games = higher baron avg
+ * Lower X = narrower = fewer 2nd barons
+ * Target: barons in 1.0-2.0 range
  */
 function adjustBaronThreshold(analysis) {
-  const src   = readFile(SIM_PATH);
-  // Match: if (adv > 38 && adv < 62) — second baron
-  // This is a different condition from d4 — need to find the second occurrence
-  const matches = [...src.matchAll(/if \(adv > (\d+) && adv < (\d+)\)/g)];
-  if (matches.length < 2) { console.log('  [balance] WARN: 2nd baron pattern not found'); return; }
+  const src = readFile(SIM_PATH);
+  const match = src.match(/const canSecondBaron = Math\.abs\(state\.mapAdvantage - 50\) < (\d+)/);
+  if (!match) { console.log('  [balance] WARN: 2nd baron pattern not found'); return; }
 
-  // The second one should be the baron threshold
-  const m = matches[matches.length - 1];
-  let lo = parseInt(m[1]);
-  let hi = parseInt(m[2]);
+  let threshold = parseInt(match[1]);
+  const diff = analysis.avgBarons - 1.5; // target center of 1.0-2.0
 
-  const diff = analysis.avgBarons - 1.1; // target center
   if (Math.abs(diff) < 0.2) return;
 
-  if (diff > 0) {
-    // Too many barons → narrow (less frequent 2nd baron)
-    lo = Math.min(45, lo + 5);
-    hi = Math.max(55, hi - 5);
-  } else {
-    // Too few → widen
-    lo = Math.max(25, lo - 5);
-    hi = Math.min(75, hi + 5);
-  }
+  // Too many barons → narrow window (fewer 2nd barons)
+  // Too few → widen window
+  threshold = diff > 0 ? Math.max(10, threshold - 3) : Math.min(35, threshold + 3);
 
-  // Replace only the last occurrence
-  let newSrc = src;
-  const lastIdx = src.lastIndexOf(m[0]);
-  if (lastIdx === -1) return;
-
-  newSrc = src.slice(0, lastIdx) +
-    `if (adv > ${lo} && adv < ${hi})` +
-    src.slice(lastIdx + m[0].length);
-
+  const newSrc = src.replace(
+    /const canSecondBaron = Math\.abs\(state\.mapAdvantage - 50\) < \d+/,
+    `const canSecondBaron = Math.abs(state.mapAdvantage - 50) < ${threshold}`
+  );
   writeFile(SIM_PATH, newSrc);
-  const msg = `Baron 2nd threshold: >${m[1]}&&<${m[2]} → >${lo}&&<${hi} [avg barons ${analysis.avgBarons} → target 0.8-1.4]`;
+  const msg = `Baron 2nd threshold: <${match[1]} → <${threshold} [avg barons ${analysis.avgBarons} → target 1.0-2.0]`;
   changeLog.push(msg);
   console.log(`  [balance] ${msg}`);
 }
@@ -186,11 +161,11 @@ function adjustBaronThreshold(analysis) {
 function adjustTierOdds(analysis) {
   // Only apply when wins are very far off target AND win factor adjustment is maxed
   const src     = readFile(SIM_PATH);
-  const match   = src.match(/clamp\(50 \+ diff \* ([\d.]+),\s*15,\s*85\)/);
-  const factor  = match ? parseFloat(match[1]) : 0.5;
+  const match   = src.match(/clamp\(50 \+ diff \* ([\d.]+),\s*12,\s*88\)/);
+  const factor  = match ? parseFloat(match[1]) : 0.30;
 
   const avgWins = analysis.avgWins;
-  const isMaxed = factor <= 0.2 || factor >= 1.0;
+  const isMaxed = factor <= 0.10 || factor >= 0.60;
 
   if (!isMaxed) return; // only adjust tier odds if win factor is at extremes
 
