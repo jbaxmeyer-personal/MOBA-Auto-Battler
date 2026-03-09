@@ -23,15 +23,17 @@ function applyGoldIncome(state) {
 // ─── XP / Level ──────────────────────────────────────────────────────────────
 
 function addXP(state, amount) {
-  if (state.level >= 5) return;
+  const maxLevel = CONFIG.LEVEL_XP.length - 1;
+  if (state.level >= maxLevel) return;
   state.xp += amount;
-  while (state.level < 5 && state.xp >= CONFIG.LEVEL_XP[state.level + 1]) {
+  while (state.level < maxLevel && state.xp >= CONFIG.LEVEL_XP[state.level + 1]) {
     state.level++;
   }
 }
 
 function buyXP(state) {
-  if (state.gold < CONFIG.XP_COST || state.level >= 5) return false;
+  const maxLevel = CONFIG.LEVEL_XP.length - 1;
+  if (state.gold < CONFIG.XP_COST || state.level >= maxLevel) return false;
   state.gold -= CONFIG.XP_COST;
   addXP(state, CONFIG.XP_PER_BUY);
   return true;
@@ -88,7 +90,10 @@ function sellPlayer(state, instanceId, returnToPool = true) {
   }
   if (!player) return false;
 
-  state.gold += CONFIG.TIER_SELL[player.tier] || 0;
+  // Stars multiply sell value: 2★ = 3× base, 3★ = 9× base (cost of all copies)
+  const baseSell = CONFIG.TIER_SELL[player.tier] || 0;
+  const starMult = player.stars === 3 ? 9 : player.stars === 2 ? 3 : 1;
+  state.gold += baseSell * starMult;
   if (returnToPool && state.playerPool && player.tier > 0) {
     const template = getPlayerTemplate(player.id);
     if (template) state.playerPool.push({ ...template, stats: { ...template.stats }, champions: [...template.champions], traits: [...(template.traits||[])] });
@@ -114,8 +119,10 @@ function checkStarUpgrades(state) {
     // Upgrade 3× 1-star → 1× 2-star
     if (counts.s1.length >= 3) {
       let removed = 0;
+      let targetRosterIdx = -1; // first roster slot freed — 2★ goes back here
       for (let i = 0; i < state.roster.length && removed < 3; i++) {
         if (state.roster[i] && state.roster[i].id === id && state.roster[i].stars === 1) {
+          if (targetRosterIdx === -1) targetRosterIdx = i;
           state.roster[i] = null; removed++;
         }
       }
@@ -125,17 +132,25 @@ function checkStarUpgrades(state) {
         }
       }
       const template = getPlayerTemplate(id);
+      if (!template) continue;
       const up = createPlayerInstance(template);
       up.stars = 2;
-      state.bench.push(up);
+      // Place back in the roster slot if one was freed, otherwise bench
+      if (targetRosterIdx !== -1) {
+        state.roster[targetRosterIdx] = up;
+      } else {
+        state.bench.push(up);
+      }
       upgraded = true;
     }
 
     // Upgrade 3× 2-star → 1× 3-star
     if (counts.s2.length >= 3) {
       let removed = 0;
+      let targetRosterIdx = -1;
       for (let i = 0; i < state.roster.length && removed < 3; i++) {
         if (state.roster[i] && state.roster[i].id === id && state.roster[i].stars === 2) {
+          if (targetRosterIdx === -1) targetRosterIdx = i;
           state.roster[i] = null; removed++;
         }
       }
@@ -145,9 +160,14 @@ function checkStarUpgrades(state) {
         }
       }
       const template = getPlayerTemplate(id);
+      if (!template) continue;
       const up = createPlayerInstance(template);
       up.stars = 3;
-      state.bench.push(up);
+      if (targetRosterIdx !== -1) {
+        state.roster[targetRosterIdx] = up;
+      } else {
+        state.bench.push(up);
+      }
       upgraded = true;
     }
   }
@@ -204,33 +224,65 @@ function calcTraitSynergies(roster) {
 function calcRegionSynergy(roster) {
   const counts = {};
   roster.filter(Boolean).forEach(p => {
-    counts[p.region] = (counts[p.region] || 0) + 1;
+    if (p.region && p.region !== 'null') {
+      counts[p.region] = (counts[p.region] || 0) + 1;
+    }
   });
 
-  // Find max region
+  // Find max region and collect ALL active region bonuses (2+ from same region)
   let maxCount = 0;
   let maxRegion = null;
+  const activeRegions = {};
+
   for (const [r, c] of Object.entries(counts)) {
     if (c > maxCount) { maxCount = c; maxRegion = r; }
+    if (c >= 2) {
+      const syn = CONFIG.REGION_SYNERGY[Math.min(c, 5)];
+      if (syn) activeRegions[r] = { count: c, bonusPct: syn.bonusPct, desc: syn.desc };
+    }
   }
 
-  const syn = maxCount >= 2 ? CONFIG.REGION_SYNERGY[Math.min(maxCount, 5)] : null;
+  const maxSyn = maxCount >= 2 ? CONFIG.REGION_SYNERGY[Math.min(maxCount, 5)] : null;
 
   return {
     counts,
     maxRegion,
     maxCount,
-    bonusPct: syn ? syn.bonusPct : 0,
-    desc: syn ? syn.desc : null,
+    activeRegions,
+    bonusPct: maxSyn ? maxSyn.bonusPct : 0,
+    desc: maxSyn ? maxSyn.desc : null,
   };
 }
 
-// Apply all synergy bonuses and return modified stats for a player
-function applyBonuses(baseStats, traitBonuses, regionBonusPct) {
+// Apply per-player synergy bonuses:
+//   - Trait bonus: only applies to players who have that trait (and it's active)
+//   - Region bonus: only applies to players from an active region
+function applyBonuses(baseStats, traitSynergies, regionSynergy, player) {
+  if (!player) {
+    const s = {};
+    for (const [k, v] of Object.entries(baseStats)) s[k] = Math.round(v);
+    return s;
+  }
+
+  // Only traits THIS player has, if that trait is active
+  const playerTraitBonus = {};
+  (player.traits || []).forEach(trait => {
+    const syn = (traitSynergies.active || []).find(s => s.trait === trait && s.activeTier >= 0);
+    if (syn && syn.bonus) {
+      for (const [k, v] of Object.entries(syn.bonus)) {
+        playerTraitBonus[k] = (playerTraitBonus[k] || 0) + v;
+      }
+    }
+  });
+
+  // Only apply region bonus if this player is from an active region
+  const regionData = player.region && regionSynergy.activeRegions
+    ? regionSynergy.activeRegions[player.region] : null;
+  const regionMult = 1 + (regionData ? regionData.bonusPct : 0) / 100;
+
   const s = {};
-  const regionMult = 1 + regionBonusPct / 100;
   for (const [k, v] of Object.entries(baseStats)) {
-    s[k] = Math.min(99, Math.round((v + (traitBonuses[k] || 0)) * regionMult));
+    s[k] = Math.round((v + (playerTraitBonus[k] || 0)) * regionMult);
   }
   return s;
 }

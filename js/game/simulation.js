@@ -17,6 +17,13 @@ function playerAt(team, pos) {
   const p = team.find(p => p && p.position === pos);
   return p ? p.name : { top:'the top laner', jungle:'the jungler', mid:'the mid laner', adc:'the ADC', support:'the support' }[pos] || 'a player';
 }
+
+// Returns "Name (Champion)" for richer PBP commentary
+function playerWithChamp(team, pos) {
+  const p = team.find(p => p && p.position === pos);
+  if (!p) return playerAt(team, pos);
+  return p.champion ? `${p.name} (${p.champion})` : p.name;
+}
 function randPlayer(team) {
   const valid = team.filter(Boolean);
   return valid.length ? valid[randInt(0, valid.length-1)].name : 'a player';
@@ -36,13 +43,13 @@ function avgStat(team, stat) {
 }
 
 function calcTeamRatings(team) {
-  // Apply trait and region bonuses to each player's stats
+  // Apply per-player trait and region bonuses
   const traits  = calcTraitSynergies(team);
   const region  = calcRegionSynergy(team);
 
   const boosted = team.map(p => {
     const base = getStats(p);
-    return applyBonuses(base, traits.bonuses, region.bonusPct);
+    return applyBonuses(base, traits, region, p || null);
   });
 
   const avg = stat => boosted.reduce((a, s) => a + s[stat], 0) / boosted.length;
@@ -77,6 +84,7 @@ function blueWinsEvent(blueScore, redScore, bConsistency, rConsistency) {
 
 function draftChampions(blueTeam, redTeam) {
   const picks = { blue: [], red: [] };
+  const globalPicked = new Set(); // prevent same champion on both teams
 
   [blueTeam, redTeam].forEach((team, ti) => {
     const side = ti === 0 ? 'blue' : 'red';
@@ -84,14 +92,19 @@ function draftChampions(blueTeam, redTeam) {
       if (!player) { picks[side].push(null); return; }
       const stats = getEffectiveStats(player);
       const pool  = player.champions || [];
-      if (!pool.length) { picks[side].push({ player: player.name, champion: '?', position: player.position }); return; }
+      if (!pool.length) { picks[side].push({ player: player.name, stars: player.stars, champion: '?', position: player.position }); return; }
 
-      // High draftIQ = picks index 0 (best champ for situation) more reliably
+      // Filter out already-picked champions; fallback to full pool if all taken
+      const available = pool.filter(c => !globalPicked.has(c));
+      const pickPool  = available.length ? available : pool;
+
+      // High draftIQ = picks index 0 (best champ) more reliably
       const draftRoll = Math.random() * 100;
-      const idx = draftRoll < stats.draftIQ ? 0 : randInt(0, pool.length - 1);
-      const champion = pool[idx];
+      const idx = draftRoll < stats.draftIQ ? 0 : randInt(0, pickPool.length - 1);
+      const champion = pickPool[idx];
+      if (champion && available.includes(champion)) globalPicked.add(champion);
       player.champion = champion;
-      picks[side].push({ player: player.name, champion, position: player.position });
+      picks[side].push({ player: player.name, stars: player.stars, champion, position: player.position });
     });
   });
 
@@ -107,32 +120,41 @@ function simulateLaning(blue, red, bR, rR, events) {
   let adv = 50;
 
   // First Blood (3–7 min)
-  const fbBlue = blueWinsEvent(bR.earlyRating, rR.earlyRating, bR.consistency, rR.consistency);
-  const fbMin  = randInt(3, 7), fbSec = randInt(0, 59);
-  const fbKiller = fbBlue ? randPlayer(blue) : randPlayer(red);
-  const fbVictim = fbBlue ? playerAt(red, 'mid')  : playerAt(blue, 'mid');
+  const fbBlue   = blueWinsEvent(bR.earlyRating, rR.earlyRating, bR.consistency, rR.consistency);
+  const fbKiller = playerWithChamp(fbBlue ? blue : red, fbBlue ? 'jungle' : 'mid');
+  const fbVictim = fbBlue ? playerAt(red, 'mid') : playerAt(blue, 'mid');
   adv = clamp(adv + (fbBlue ? 5 : -5), 5, 95);
-  events.push({ time: padTime(fbMin, fbSec), text: `⚔️ FIRST BLOOD! ${fbKiller} eliminates ${fbVictim}!`, type: 'kill', phase: 'laning', killBlue: fbBlue, advAfter: adv });
+  events.push({ time: padTime(randInt(3,7), randInt(0,59)), text: `⚔️ FIRST BLOOD! ${fbKiller} eliminates ${fbVictim}!`, type: 'kill', phase: 'laning', killBlue: fbBlue, advAfter: adv });
 
-  // CS/laning advantage commentary (5–9 min)
+  // CS/laning advantage (5–8 min)
   const laningBlue = blueWinsEvent(bR.earlyRating, rR.earlyRating, bR.consistency, rR.consistency);
-  const csDiff = randInt(8, 22);
-  const csLaner = laningBlue ? playerAt(blue, 'mid') : playerAt(red, 'mid');
-  const csDir   = laningBlue ? 'a' : 'an';
+  const csDiff  = randInt(8, 24);
+  const csLane  = ['top','mid','bot'][randInt(0,2)];
+  const csLaner = laningBlue ? playerAt(blue, csLane === 'bot' ? 'adc' : csLane)
+                              : playerAt(red,  csLane === 'bot' ? 'adc' : csLane);
   adv = clamp(adv + (laningBlue ? 3 : -3), 5, 95);
-  events.push({ time: padTime(randInt(5,9), randInt(0,59)), text: `📊 ${csLaner} builds ${csDir} +${csDiff} CS lead — the laning phase is going their way.`, type: 'commentary', phase: 'laning', advAfter: adv });
+  events.push({ time: padTime(randInt(5,8), randInt(0,59)), text: `📊 ${csLaner} builds a +${csDiff} CS lead in the ${csLane} — the laning phase is swinging their way.`, type: 'commentary', phase: 'laning', advAfter: adv });
 
-  // Gank event (6–11 min)
-  const gankBlue = blueWinsEvent(bR.jungleRating, rR.jungleRating, bR.consistency, rR.consistency);
-  const gankLane = ['top', 'mid', 'bot'][randInt(0,2)];
-  const gankPos  = gankLane === 'bot' ? 'adc' : gankLane;
-  const jgName   = gankBlue ? playerAt(blue, 'jungle') : playerAt(red, 'jungle');
+  // Gank (6–10 min)
+  const gankBlue   = blueWinsEvent(bR.jungleRating, rR.jungleRating, bR.consistency, rR.consistency);
+  const gankLane   = ['top', 'mid', 'bot'][randInt(0,2)];
+  const gankPos    = gankLane === 'bot' ? 'adc' : gankLane;
+  const jgName     = playerWithChamp(gankBlue ? blue : red, 'jungle');
   const gankVictim = gankBlue ? playerAt(red, gankPos) : playerAt(blue, gankPos);
-  if (chance(65)) {
+  if (chance(68)) {
     adv = clamp(adv + (gankBlue ? 4 : -4), 5, 95);
-    events.push({ time: padTime(randInt(6,11), randInt(0,59)), text: `🗺️ ${jgName} ganks ${gankLane} — ${gankVictim} is caught out of position and goes down!`, type: 'kill', phase: 'laning', killBlue: gankBlue, advAfter: adv });
+    events.push({ time: padTime(randInt(6,10), randInt(0,59)), text: `🗺️ ${jgName} ganks ${gankLane} — ${gankVictim} is caught out of position and goes down!`, type: 'kill', phase: 'laning', killBlue: gankBlue, advAfter: adv });
   } else {
-    events.push({ time: padTime(randInt(6,11), randInt(0,59)), text: `🗺️ ${jgName} rotates to ${gankLane} but the enemy wards it and ${gankVictim} flashes away!`, type: 'commentary', phase: 'laning', advAfter: adv });
+    events.push({ time: padTime(randInt(6,10), randInt(0,59)), text: `🗺️ ${jgName} rotates to ${gankLane} but the enemy wards it — ${gankVictim} flashes away just in time!`, type: 'commentary', phase: 'laning', advAfter: adv });
+  }
+
+  // Bot lane 2v2 skirmish (8–12 min)
+  if (chance(55)) {
+    const botBlue  = blueWinsEvent(bR.earlyRating, rR.earlyRating, bR.consistency, rR.consistency);
+    const botKills = chance(50) ? 2 : 1;
+    adv = clamp(adv + (botBlue ? botKills * 2 : -botKills * 2), 5, 95);
+    const adcName  = playerWithChamp(botBlue ? blue : red, 'adc');
+    events.push({ time: padTime(randInt(8,12), randInt(0,59)), text: `🏹 ${botBlue?'Blue':'Red'} side wins a ${botKills}-for-0 skirmish in bot — ${adcName} picks up the kills!`, type: 'kill', phase: 'laning', killBlue: botBlue, advAfter: adv });
   }
 
   // First Tower (10–14 min)
@@ -168,11 +190,20 @@ function simulateMidGame(blue, red, bR, rR, advIn, events) {
     events.push({ time: padTime(randInt(14,17), randInt(0,59)), text: `🐉 ${playerAt(d1Blue ? blue : red, 'jungle')} secures the ${d1Type} Dragon. ${d1Blue ? 'Blue' : 'Red'} side takes early drake control.`, type: 'objective', phase: 'midgame', dragonBlue: d1Blue, advAfter: adv });
   }
 
-  // Rift Herald (15–19 min)
+  // Rift Herald (15–18 min)
   const rhBlue = blueWinsEvent(bR.jungleRating, rR.jungleRating, bR.consistency, rR.consistency);
   adv = clamp(adv + (rhBlue ? 3 : -3), 5, 95);
   const rhLane = ['top', 'mid'][randInt(0,1)];
-  events.push({ time: padTime(randInt(15,19), randInt(0,59)), text: `🔮 Rift Herald seized by ${rhBlue ? 'blue' : 'red'} side and smashed into the ${rhLane} lane — tower falls!`, type: 'objective', phase: 'midgame', towerBlue: rhBlue, advAfter: adv });
+  const rhJg   = playerAt(rhBlue ? blue : red, 'jungle');
+  events.push({ time: padTime(randInt(15,18), randInt(0,59)), text: `🔮 ${rhJg} secures Rift Herald for ${rhBlue ? 'blue' : 'red'} side — it's smashed into the ${rhLane} lane and the tower crumbles!`, type: 'objective', phase: 'midgame', towerBlue: rhBlue, advAfter: adv });
+
+  // Second tower (17–21 min, conditional on laning advantage)
+  if (adv > 58 || adv < 42) {
+    const t2Blue  = adv > 50; // leading team likely gets second tower
+    const t2Lane  = ['top', 'bot'][randInt(0,1)];
+    adv = clamp(adv + (t2Blue ? 4 : -4), 5, 95);
+    events.push({ time: padTime(randInt(17,21), randInt(0,59)), text: `🏰 ${t2Blue?'Blue':'Red'} side destroys the ${t2Lane} outer tower — full lane control established!`, type: 'objective', phase: 'midgame', towerBlue: t2Blue, advAfter: adv });
+  }
 
   // Mid-game teamfight (18–23 min)
   const tf1Blue   = blueWinsEvent(bR.tfRating, rR.tfRating, bR.consistency, rR.consistency);
@@ -196,73 +227,108 @@ function simulateMidGame(blue, red, bR, rR, advIn, events) {
 
 // ─── Late Game (26+ min) ──────────────────────────────────────────────────────
 
-function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx) {
+function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, midDragons) {
   let adv = advIn;
+  const dragons = { blue: midDragons.blue, red: midDragons.red }; // running count
 
   const objectiveRating = (r) => r.lateRating * 0.55 + r.tfRating * 0.45;
 
-  // Dragon 3 / Soul point (26–30 min)
+  // Dragon 3 (26–30 min)
   const d3Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
   const d3Type = drakes[dIdx] || drakes[0];
+  if (d3Blue) dragons.blue++; else dragons.red++;
   adv = clamp(adv + (d3Blue ? 5 : -5), 5, 95);
-  const soulText = d3Blue ? (adv > 65 ? ' 🔥 **DRAGON SOUL** — Blue side is unstoppable!' : '') :
-                            (adv < 35 ? ' 🔥 **DRAGON SOUL** — Red side is unstoppable!' : '');
-  events.push({ time: padTime(randInt(26,30), randInt(0,59)), text: `🐉 ${d3Type} Dragon to ${d3Blue ? 'blue' : 'red'} side.${soulText}`, type: 'objective', phase: 'lategame', dragonBlue: d3Blue, advAfter: adv });
+  const d3Soul = dragons.blue >= 4 ? '🔥 DRAGON SOUL — Blue side is unstoppable!'
+               : dragons.red  >= 4 ? '🔥 DRAGON SOUL — Red side is unstoppable!' : '';
+  events.push({ time: padTime(randInt(26,30), randInt(0,59)),
+    text: `🐉 ${d3Type} Dragon secured by ${d3Blue ? 'blue' : 'red'} side. ${d3Soul}`,
+    type: 'objective', phase: 'lategame', dragonBlue: d3Blue, advAfter: adv });
 
   // Baron Nashor (28–33 min)
-  const baronMin = randInt(28, 33);
+  const baronMin  = randInt(28, 33);
   const baronBlue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
+  let baronWinner; // true = blue has buff
 
   if (chance(18)) {
-    // STEAL
-    const stealerSide = !baronBlue; // opposite team steals
-    const stealer = playerAt(stealerSide ? blue : red, 'jungle');
-    adv = clamp(adv + (stealerSide ? 12 : -12), 5, 95);
-    events.push({ time: padTime(baronMin, randInt(0,59)), text: `🟣 BARON STEAL!! ${stealer} smites it away from ${!stealerSide ? 'blue' : 'red'} side at the last second! THE CROWD GOES WILD!`, type: 'objective', phase: 'lategame', baronBlue: stealerSide, advAfter: adv });
-  } else {
-    adv = clamp(adv + (baronBlue ? 10 : -10), 5, 95);
+    // STEAL — opposite team smites it away
+    baronWinner = !baronBlue;
+    const stealer = playerWithChamp(baronWinner ? blue : red, 'jungle');
+    adv = clamp(adv + (baronWinner ? 12 : -12), 5, 95);
     events.push({ time: padTime(baronMin, randInt(0,59)),
-      text: `🟣 BARON NASHOR secured by ${baronBlue ? 'blue' : 'red'} side! ${playerAt(baronBlue ? blue : red, 'jungle')} lands the Smite — buff applied!`,
-      type: 'objective', phase: 'lategame', baronBlue: baronBlue, advAfter: adv });
+      text: `🟣 BARON STEAL!! ${stealer} smites it away from ${baronWinner ? 'red' : 'blue'} side at the last second! THE CROWD GOES WILD!`,
+      type: 'objective', phase: 'lategame', baronBlue: baronWinner, advAfter: adv });
+  } else {
+    baronWinner = baronBlue;
+    const jg = playerWithChamp(baronWinner ? blue : red, 'jungle');
+    adv = clamp(adv + (baronWinner ? 10 : -10), 5, 95);
+    events.push({ time: padTime(baronMin, randInt(0,59)),
+      text: `🟣 BARON NASHOR secured by ${baronWinner ? 'blue' : 'red'} side! ${jg} lands the Smite — buff applied!`,
+      type: 'objective', phase: 'lategame', baronBlue: baronWinner, advAfter: adv });
   }
 
-  // Baron push teamfight (31–36 min)
-  const pushBlue  = blueWinsEvent(bR.tfRating + (adv > 50 ? 8 : 0), rR.tfRating + (adv < 50 ? 8 : 0), bR.consistency, rR.consistency);
+  // Dragon 4 (30–34 min) — required for Dragon Soul
+  if (adv > 20 && adv < 80) { // only in non-stomp games
+    const d4Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
+    const d4Type = drakes[(dIdx + 1) % drakes.length];
+    if (d4Blue) dragons.blue++; else dragons.red++;
+    adv = clamp(adv + (d4Blue ? 4 : -4), 5, 95);
+    const soulSide = dragons.blue >= 4 ? 'blue' : dragons.red >= 4 ? 'red' : null;
+    const soulText = soulSide ? ` 🔥 DRAGON SOUL — ${soulSide === 'blue' ? 'Blue' : 'Red'} side is now empowered!` : '';
+    events.push({ time: padTime(randInt(30,34), randInt(0,59)),
+      text: `🐉 ${d4Type} Dragon to ${d4Blue ? 'blue' : 'red'} side.${soulText}`,
+      type: 'objective', phase: 'lategame', dragonBlue: d4Blue, advAfter: adv });
+  }
+
+  // Baron push teamfight (31–36 min) — team with Baron buff has major advantage
+  const pushBlue  = blueWinsEvent(
+    bR.tfRating + (baronWinner ? 18 : 0),
+    rR.tfRating + (!baronWinner ? 18 : 0),
+    bR.consistency, rR.consistency
+  );
   const pushKills = randInt(2, 5);
   const pushLoss  = randInt(0, Math.max(0, pushKills - 2));
   adv = clamp(adv + (pushBlue ? pushKills * 1.6 : -pushKills * 1.6), 5, 95);
+  const inhibLane = ['top', 'mid', 'bot'][randInt(0,2)];
   events.push({ time: padTime(randInt(31,36), randInt(0,59)),
-    text: `💥 Baron buff pressure — ${pushBlue ? 'Blue' : 'Red'} side wins a ${pushKills}-for-${pushLoss} fight and destroys an inhibitor!`,
+    text: `💥 ${pushBlue?'Blue':'Red'} side uses Baron buff to win ${pushKills}-for-${pushLoss} — ${inhibLane} inhibitor falls!`,
     type: 'teamfight', phase: 'lategame', tfBlueKills: pushBlue ? pushKills : pushLoss, tfRedKills: pushBlue ? pushLoss : pushKills, advAfter: adv });
 
-  // Final teamfight / Nexus push (36–43 min)
-  const finalBlue = blueWinsEvent(bR.lateRating, rR.lateRating, bR.consistency, rR.consistency);
+  // Second Baron for long games (36–40 min, only if game drags)
+  if (adv > 38 && adv < 62) {
+    const b2Blue = blueWinsEvent(objectiveRating(bR), objectiveRating(rR), bR.consistency, rR.consistency);
+    adv = clamp(adv + (b2Blue ? 8 : -8), 5, 95);
+    events.push({ time: padTime(randInt(36,40), randInt(0,59)),
+      text: `🟣 Second BARON NASHOR spawns — ${b2Blue ? 'blue' : 'red'} side contests and secures it!`,
+      type: 'objective', phase: 'lategame', baronBlue: b2Blue, advAfter: adv });
+  }
 
-  // Clutch comeback check
-  const comebackSide = !finalBlue; // losing side has clutch chance
+  // Final teamfight / Nexus push (36–44 min)
+  const finalBlue = blueWinsEvent(bR.lateRating, rR.lateRating, bR.consistency, rR.consistency);
+  const comebackSide = !finalBlue;
   const clutchRating = comebackSide ? bR.clutchRating : rR.clutchRating;
   const comebackHappens = chance(clamp((clutchRating - 60) * 0.7, 4, 24));
 
   let blueWins;
   if (comebackHappens) {
-    blueWins = comebackSide; // losing side pulls it back!
-    const hero = randPlayer(blueWins ? blue : red);
+    blueWins = comebackSide;
+    const hero = playerWithChamp(blueWins ? blue : red, ['mid','adc','jungle'][randInt(0,2)]);
     adv = clamp(adv + (blueWins ? 15 : -15), 5, 95);
     events.push({ time: padTime(randInt(36,40), randInt(0,59)),
-      text: `🔥 CLUTCH COMEBACK! ${hero} makes an INSANE play — ${blueWins ? 'Blue' : 'Red'} side turns the fight around! ACE!`,
+      text: `🔥 CLUTCH COMEBACK! ${hero} makes an INSANE outplay — ${blueWins ? 'Blue' : 'Red'} side turns the fight around! ACE!`,
       type: 'teamfight', phase: 'lategame', advAfter: adv });
   } else {
     blueWins = finalBlue;
     const finalKills = randInt(2, 5);
     const finalLoss  = randInt(0, Math.max(0, finalKills - 1));
+    const mvp        = playerWithChamp(blueWins ? blue : red, ['mid','adc'][randInt(0,1)]);
     adv = clamp(adv + (blueWins ? finalKills * 1.5 : -finalKills * 1.5), 5, 95);
-    events.push({ time: padTime(randInt(36,43), randInt(0,59)),
-      text: `💥 Final teamfight — ${blueWins ? 'Blue' : 'Red'} side wins ${finalKills}-for-${finalLoss}! The base is wide open!`,
+    events.push({ time: padTime(randInt(36,44), randInt(0,59)),
+      text: `💥 Final teamfight — ${blueWins ? 'Blue' : 'Red'} side wins ${finalKills}-for-${finalLoss}! ${mvp} absolutely pops off — the base is open!`,
       type: 'teamfight', phase: 'lategame', tfBlueKills: blueWins ? finalKills : finalLoss, tfRedKills: blueWins ? finalLoss : finalKills, advAfter: adv });
   }
 
   // Nexus
-  const nexusMin = randInt(38, 46);
+  const nexusMin = randInt(38, 48);
   events.push({ time: padTime(nexusMin, randInt(0,59)),
     text: `🏆 NEXUS DESTROYED! ${blueWins ? 'Blue' : 'Red'} side wins the match!`,
     type: 'result', phase: 'lategame', advAfter: adv });
@@ -348,15 +414,27 @@ function simulateMatch(blueTeam, redTeam, blueTeamName, redTeamName) {
   const midResult  = simulateMidGame(blue, red, bR, rR, advantage, midEvents);
   advantage = midResult.adv;
 
-  const lateResult = simulateLateGame(blue, red, bR, rR, advantage, lateEvents, midResult.drakes, midResult.dIdx);
+  // Count dragons won in mid game for soul tracking
+  const midDragons = { blue: 0, red: 0 };
+  midEvents.forEach(e => {
+    if (e.dragonBlue !== undefined) { if (e.dragonBlue) midDragons.blue++; else midDragons.red++; }
+  });
+
+  const lateResult = simulateLateGame(blue, red, bR, rR, advantage, lateEvents, midResult.drakes, midResult.dIdx, midDragons);
   advantage = lateResult.adv;
   const blueWins   = lateResult.blueWins;
 
   const stats = deriveMatchStats(blueWins, advantage);
 
+  // Sort events within each phase by timestamp so they display in order
+  const sortByTime = evs => evs.slice().sort((a, b) => {
+    const toSec = t => { if (!t) return 999; const [m,s]=(t||'0:0').split(':').map(Number); return m*60+(s||0); };
+    return toSec(a.time) - toSec(b.time);
+  });
+
   return {
     winner:  blueWins ? 'blue' : 'red',
-    events:  { laning: laningEvents, midgame: midEvents, lategame: lateEvents },
+    events:  { laning: sortByTime(laningEvents), midgame: sortByTime(midEvents), lategame: sortByTime(lateEvents) },
     stats,
     draft,
     advantage,

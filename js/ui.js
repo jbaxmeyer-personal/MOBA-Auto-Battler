@@ -17,7 +17,7 @@ function showTab(tabName) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function tierColor(tier)  { return ['','#95a5a6','#2ecc71','#3498db','#9b59b6','#d4af37'][tier]||'#aaa'; }
+function tierColor(tier)  { return ['','#95a5a6','#2ecc71','#3498db','#9b59b6','#e07800'][tier]||'#aaa'; }
 function tierLabel(tier)  { return ['','Iron','Silver','Gold','Platinum','Diamond'][tier]||''; }
 function posIcon(pos)     { return { top:'⚔️', jungle:'🌿', mid:'🔮', adc:'🏹', support:'🛡️' }[pos]||'👤'; }
 function starBadge(stars) { return stars === 3 ? '<span class="star-badge s3">★★★</span>' : stars === 2 ? '<span class="star-badge s2">★★</span>' : ''; }
@@ -40,16 +40,17 @@ function renderHeader(state) {
 // ─── XP Bar ──────────────────────────────────────────────────────────────────
 
 function renderXPBar(state) {
+  const maxLevel = CONFIG.LEVEL_XP.length - 1;
   const curXP    = CONFIG.LEVEL_XP[state.level]     || 0;
   const nextXP   = CONFIG.LEVEL_XP[state.level + 1] || curXP;
   const inLevel  = state.xp - curXP;
   const needed   = nextXP - curXP;
-  const pct      = state.level >= 5 ? 100 : (inLevel / needed) * 100;
+  const pct      = state.level >= maxLevel ? 100 : (inLevel / needed) * 100;
 
   const fill  = document.getElementById('xp-fill');
   const label = document.getElementById('xp-label');
   if (fill)  fill.style.width = `${pct}%`;
-  if (label) label.textContent = state.level >= 5 ? 'MAX LEVEL' : `${inLevel}/${needed} XP · Lv${state.level}`;
+  if (label) label.textContent = state.level >= maxLevel ? 'MAX LEVEL' : `${inLevel}/${needed} XP · Lv${state.level}`;
 }
 
 // ─── Player Card ─────────────────────────────────────────────────────────────
@@ -92,14 +93,16 @@ function playerCardHTML(player, ctx, extra = {}) {
       </div>`;
   }
 
+  const regionDisplay = player.region && player.region !== 'null' ? player.region : '';
+
   return `
     <div class="player-card tier-${player.tier}${isSelected?' selected':''}${extra.owned?' owned':''}" style="border-color:${color}">
       <div class="card-top" style="background:${color}18">
         <span class="card-pos">${posIcon(player.position)}</span>
-        <span class="card-name">${player.name}${starBadge(player.stars)}</span>
-        <span class="card-tier" style="color:${color}">${tierLabel(player.tier)}</span>
+        <span class="card-name">${player.name}</span>
+        <span class="card-tier" style="color:${color}">${tierLabel(player.tier)}${starBadge(player.stars)}</span>
       </div>
-      <div class="card-region">${player.region}</div>
+      <div class="card-region">${regionDisplay}</div>
       <div class="card-traits">${traitBadges}</div>
       <div class="card-champs" title="Champion Pool">🎮 ${champList}</div>
       <div class="card-stats">
@@ -181,23 +184,24 @@ function renderSynergies(state) {
       </div>`;
   }).join('');
 
-  // Region row
-  let regionRow = '';
-  if (regionResult.maxCount >= 2) {
-    const color = CONFIG.REGION_COLORS[regionResult.maxRegion] || '#aaa';
-    regionRow = `
+  // Region rows — show ALL active region bonuses (can have multiple if 2+ from different regions)
+  let regionRows = '';
+  for (const [region, data] of Object.entries(regionResult.activeRegions || {})) {
+    if (!region || region === 'null') continue;
+    const color = CONFIG.REGION_COLORS[region] || '#aaa';
+    regionRows += `
       <div class="syn-row syn-active syn-region">
         <span class="syn-icon" style="color:${color}">🌍</span>
-        <span class="syn-name">${regionResult.maxRegion}</span>
-        <span class="syn-count count-active">${regionResult.maxCount}</span>
-        <span class="syn-bonus">${regionResult.desc}</span>
+        <span class="syn-name">${region}</span>
+        <span class="syn-count count-active">${data.count}</span>
+        <span class="syn-bonus">${data.desc} (${region} players only)</span>
       </div>`;
   }
 
   el.innerHTML = `
     <div class="syn-title">Team Synergies</div>
     ${traitRows || '<p class="syn-empty">No trait synergies yet</p>'}
-    ${regionRow}`;
+    ${regionRows}`;
 }
 
 // ─── Standings ────────────────────────────────────────────────────────────────
@@ -219,7 +223,7 @@ function renderStandings(state) {
         ${standings.map((t, i) => {
           const inBracket = i < CONFIG.BRACKET_SIZE;
           const diff = (t.kills||0) - (t.deaths||0);
-          return `<tr class="${t.isHuman?'row-human':''} ${inBracket?'row-bracket':''}">
+          return `<tr class="${t.isHuman?'row-human':''} ${inBracket?'row-bracket':''}" onclick="showTeamRoster('${t.id}')" style="cursor:pointer" title="Click to view roster">
             <td>${i+1}${inBracket?' 🏆':''}</td>
             <td>${t.isHuman?'⭐ ':''}${t.name}</td>
             <td><span class="strat-badge">${t.isHuman?'You':t.strategy||'—'}</span></td>
@@ -270,8 +274,8 @@ function renderDraft(matchResult, blueTeamName, redTeamName) {
   const renderPicks = (picks) => picks.filter(Boolean).map(pick => `
     <div class="draft-pick">
       <span class="pick-pos">${posIcon(pick.position)}</span>
-      <span class="pick-player">${pick.player}</span>
-      <span class="pick-champ">→ ${pick.champion}</span>
+      <span class="pick-player">${pick.player}${pick.stars > 1 ? starBadge(pick.stars) : ''}</span>
+      <span class="pick-champ">→ ${pick.champion || '?'}</span>
     </div>`).join('');
 
   document.getElementById('draft-blue').innerHTML = renderPicks(matchResult.draft.blue.filter(Boolean));
@@ -400,7 +404,14 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
       el.className = 'pbp-phase-header';
       el.textContent = ev.text;
     } else {
-      el.className = `pbp-line pbp-${ev.type || 'commentary'}`;
+      // Determine which side won this event for color coding
+      const blueWon = ev.killBlue    !== undefined ? ev.killBlue   :
+                      ev.towerBlue   !== undefined ? ev.towerBlue  :
+                      ev.dragonBlue  !== undefined ? ev.dragonBlue :
+                      ev.baronBlue   !== undefined ? ev.baronBlue  :
+                      ev.tfBlueKills !== undefined ? (ev.tfBlueKills > (ev.tfRedKills||0)) : null;
+      const sideClass = blueWon === true ? ' pbp-blue-event' : blueWon === false ? ' pbp-red-event' : '';
+      el.className = `pbp-line pbp-${ev.type || 'commentary'}${sideClass}`;
       el.innerHTML = `<span class="pbp-time">${ev.time || ''}</span><span class="pbp-text">${ev.text || ''}</span>`;
       updateLiveScoreBar(ev);
     }
@@ -543,6 +554,38 @@ function renderBracket(state) {
         ${champion ? `<div class="champion-banner">🏆 Champion: ${champion.name}</div>` : ''}
       </div>
     </div>`;
+}
+
+// ─── Team Roster Modal ────────────────────────────────────────────────────────
+
+function showTeamRoster(teamId) {
+  const team = G.allTeams.find(t => t.id === teamId);
+  if (!team) return;
+
+  let modal = document.getElementById('team-roster-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'team-roster-modal';
+    modal.className = 'team-roster-modal';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+    document.body.appendChild(modal);
+  }
+
+  const roster = (team.roster || []).filter(Boolean);
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-team-name">${team.isHuman ? '⭐ ' : ''}${team.name}</span>
+        <span class="modal-record">${team.wins||0}W–${team.losses||0}L · <b>${team.isHuman ? 'You' : team.strategy || 'AI'}</b></span>
+        <button class="modal-close" onclick="document.getElementById('team-roster-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-roster">
+        ${roster.length
+          ? roster.map(p => playerCardHTML(p, 'view')).join('')
+          : '<p style="color:var(--text-dim);padding:12px">No players yet.</p>'}
+      </div>
+    </div>`;
+  modal.style.display = 'flex';
 }
 
 // ─── Game Over ────────────────────────────────────────────────────────────────

@@ -10,8 +10,8 @@ const CONFIG = {
   XP_PER_ROUND: 2,
 
   // XP levels only affect shop quality, not roster size
-  // Cumulative XP to reach each level (index = level)
-  LEVEL_XP: [0, 0, 2, 6, 12, 20],
+  // Cumulative XP to reach each level (index = level) — max level 9
+  LEVEL_XP: [0, 0, 2, 6, 12, 20, 32, 48, 68, 92],
 
   // Cost to buy / gold returned on sell, indexed by tier
   TIER_COST: [0, 1, 2, 3, 4, 5],
@@ -32,13 +32,17 @@ const CONFIG = {
   TOTAL_TEAMS: 8,
   BRACKET_SIZE: 4,
 
-  // Shop tier odds by player level [T1%, T2%, T3%, T4%, T5%]
+  // Shop tier odds by player level [T1%, T2%, T3%, T4%, T5%] — TFT-style scaling
   TIER_ODDS: {
-    1: [ 38,  52,  10,   0,  0],
-    2: [ 14,  58,  22,   6,  0],
-    3: [  3,  38,  38,  18,  3],
-    4: [  0,  16,  34,  34, 16],
-    5: [  0,   6,  22,  38, 34],
+    1: [75, 25,  0,  0,  0],  // Only Iron/Silver
+    2: [50, 35, 15,  0,  0],  // Mostly Iron/Silver, some Gold
+    3: [20, 38, 35,  7,  0],  // Gold focus, barely any Platinum, no Diamond
+    4: [ 8, 24, 40, 24,  4],  // Gold/Platinum mix
+    5: [ 2, 14, 36, 34, 14],  // Platinum focus, Diamond available
+    6: [ 0,  6, 24, 42, 28],  // Platinum/Diamond
+    7: [ 0,  2, 15, 40, 43],  // Diamond focus
+    8: [ 0,  1,  9, 34, 56],  // Mostly Diamond
+    9: [ 0,  0,  5, 25, 70],  // Almost all Diamond
   },
 
   // Star upgrade multipliers (applied to base stats)

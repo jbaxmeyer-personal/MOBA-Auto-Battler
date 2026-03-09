@@ -104,12 +104,29 @@ function initAITeam(cfg) {
     if (posIdx !== -1) starterRoster[posIdx] = p;
   });
 
+  // AI spends starting gold to replace T0 rookies with T1 players from their pool
+  let spendGold = CONFIG.STARTING_GOLD;
+  shuffleArray(privatePool);
+  for (let i = privatePool.length - 1; i >= 0 && spendGold > 0; i--) {
+    const p = privatePool[i];
+    if (p.tier !== 1) continue;
+    const posIdx = CONFIG.POSITIONS.indexOf(p.position);
+    if (posIdx === -1) continue;
+    const cost = CONFIG.TIER_COST[p.tier];
+    if (spendGold < cost) continue;
+    if (starterRoster[posIdx] && starterRoster[posIdx].tier === 0) {
+      starterRoster[posIdx] = createPlayerInstance(p);
+      privatePool.splice(i, 1);
+      spendGold -= cost;
+    }
+  }
+
   return {
     id:          cfg.name.replace(/\s+/g, '_').toLowerCase(),
     name:        cfg.name,
     strategy:    cfg.strategy,
     targetTrait,
-    gold:        CONFIG.STARTING_GOLD,
+    gold:        spendGold,
     xp:          0,
     level:       1,
     roster:      starterRoster,
@@ -135,23 +152,24 @@ function simulateAIShopRound(aiTeam, round) {
   // ─ Auto XP ─
   if (!aiTeam.xp) aiTeam.xp = 0;
   aiTeam.xp += CONFIG.XP_PER_ROUND;
+  const maxLevel = CONFIG.LEVEL_XP.length - 1;
   // Level up from XP
-  while (aiTeam.level < 5 && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) {
+  while (aiTeam.level < maxLevel && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) {
     aiTeam.level++;
   }
 
   const strategy = aiTeam.strategy;
 
   // ─ Level-up decisions ─
-  if (strategy === 'leveler' && aiTeam.level < 5 && aiTeam.gold >= CONFIG.XP_COST + 3) {
+  if (strategy === 'leveler' && aiTeam.level < maxLevel && aiTeam.gold >= CONFIG.XP_COST + 3) {
     aiTeam.gold -= CONFIG.XP_COST;
     aiTeam.xp   += CONFIG.XP_PER_BUY;
-    while (aiTeam.level < 5 && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) aiTeam.level++;
+    while (aiTeam.level < maxLevel && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) aiTeam.level++;
   }
-  if (strategy === 'aggressor' && aiTeam.level < 5 && aiTeam.gold >= CONFIG.XP_COST + 5 && round % 2 === 0) {
+  if (strategy === 'aggressor' && aiTeam.level < maxLevel && aiTeam.gold >= CONFIG.XP_COST + 5 && round % 2 === 0) {
     aiTeam.gold -= CONFIG.XP_COST;
     aiTeam.xp   += CONFIG.XP_PER_BUY;
-    while (aiTeam.level < 5 && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) aiTeam.level++;
+    while (aiTeam.level < maxLevel && aiTeam.xp >= CONFIG.LEVEL_XP[aiTeam.level + 1]) aiTeam.level++;
   }
 
   // ─ Draw virtual shop ─

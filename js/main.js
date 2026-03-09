@@ -160,11 +160,11 @@ function startBracket() {
     setTimeout(() => {
       renderGameOver(G, false);
       showScreen('screen-gameover');
-    }, 1500);
+    }, 3000);
     return;
   }
 
-  setTimeout(() => enterBracketShop(), 1800);
+  setTimeout(() => enterBracketShop(), 3500);
 }
 
 function enterBracketShop() {
@@ -204,7 +204,7 @@ function handleBracketContinue() {
   if (bracket.bracketRound === 'eliminated') {
     showScreen('screen-bracket');
     renderBracket(G);
-    setTimeout(() => { renderGameOver(G, false); showScreen('screen-gameover'); }, 1000);
+    setTimeout(() => { renderGameOver(G, false); showScreen('screen-gameover'); }, 2500);
     return;
   }
 
@@ -214,23 +214,47 @@ function handleBracketContinue() {
     setTimeout(() => {
       renderGameOver(G, bracket.champion?.isHuman);
       showScreen('screen-gameover');
-    }, 1000);
+    }, 2500);
     return;
   }
 
   // More bracket rounds remain
   showScreen('screen-bracket');
   renderBracket(G);
-  setTimeout(() => enterBracketShop(), 1500);
+  setTimeout(() => enterBracketShop(), 3000);
 }
 
 // ─── Shop Handlers ────────────────────────────────────────────────────────────
 
 function onBuyPlayer(shopIndex) {
+  const bought = G.shopSlots[shopIndex];
+  if (!bought) return;
   if (!buyShopPlayer(G, shopIndex)) {
     showToast('Not enough gold or no space! (max 5 active + 9 bench)');
     return;
   }
+
+  // Auto-replace T0 rookie starter of the same position with the just-bought player
+  const posIdx = CONFIG.POSITIONS.indexOf(bought.position);
+  if (posIdx !== -1) {
+    const rookie = G.roster[posIdx];
+    if (rookie && rookie.tier === 0) {
+      // Find the newly bought player on bench (last added non-T0 at this position)
+      let newBenchIdx = -1;
+      for (let i = G.bench.length - 1; i >= 0; i--) {
+        if (G.bench[i].position === bought.position && G.bench[i].tier > 0) {
+          newBenchIdx = i; break;
+        }
+      }
+      if (newBenchIdx !== -1) {
+        const newPlayer = G.bench.splice(newBenchIdx, 1)[0];
+        G.roster[posIdx] = newPlayer;
+        showToast(`${newPlayer.name} replaces ${rookie.name}!`);
+        // Rookie removed (T0 gives 0g and isn't from pool)
+      }
+    }
+  }
+
   G.selectedUnit = null;
   renderShop(G);
   renderHeader(G);
@@ -277,7 +301,8 @@ function onLockShop() {
 
 function onBuyXP() {
   if (!buyXP(G)) {
-    showToast(G.level >= 5 ? 'Already max level!' : 'Need 4g to buy XP!');
+    const maxLevel = CONFIG.LEVEL_XP.length - 1;
+    showToast(G.level >= maxLevel ? 'Already max level!' : 'Need 4g to buy XP!');
     return;
   }
   renderShop(G);
@@ -319,6 +344,11 @@ function playAgain() {
 // ─── DOM Ready ────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Warn before page refresh/close while a game is in progress
+  window.addEventListener('beforeunload', e => {
+    if (G.phase !== 'setup') { e.preventDefault(); e.returnValue = ''; }
+  });
+
   // Setup
   document.getElementById('btn-start-game')
     ?.addEventListener('click', startGame);

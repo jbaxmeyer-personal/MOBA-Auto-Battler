@@ -17,7 +17,7 @@
   --text-hi:    #e8e0d0;
   --win:        #4caf50;
   --loss:       #f44336;
-  --t2:#2ecc71; --t3:#3498db; --t4:#9b59b6; --t5:#d4af37;
+  --t2:#2ecc71; --t3:#3498db; --t4:#9b59b6; --t5:#e07800;
   --radius: 6px;
   --card-w: 158px;
 }
@@ -130,9 +130,9 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .card-pos{font-size:15px;flex-shrink:0;}
 .card-name{font-weight:700;font-size:12px;flex:1;color:var(--text-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-tier{font-size:10px;font-weight:600;flex-shrink:0;}
-.star-badge{font-size:10px;margin-left:2px;}
+.star-badge{font-size:10px;margin-left:3px;flex-shrink:0;}
 .star-badge.s2{color:var(--t3);}
-.star-badge.s3{color:var(--t5);}
+.star-badge.s3{color:#ffd700;}
 
 .card-region{font-size:10px;color:var(--text-dim);padding:2px 8px;border-bottom:1px solid var(--border);}
 
@@ -423,3 +423,35 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 /* ── T0 Rookie card styling ──────────────────────────────────────────── */
 .player-card.tier-0 { border-color: #555 !important; opacity: 0.75; }
 .player-card.tier-0 .card-top { background: rgba(100,100,100,0.15) !important; }
+
+/* ── PBP Blue/Red side indicators ───────────────────────────────────── */
+.pbp-blue-event { border-right: 3px solid rgba(79,195,247,0.7); }
+.pbp-red-event  { border-right: 3px solid rgba(255,123,123,0.7); }
+
+/* ── Team Roster Modal ───────────────────────────────────────────────── */
+.team-roster-modal {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(0,0,0,0.75);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-content {
+  background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: 10px; max-width: 900px; width: 100%;
+  max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.modal-team-name { font-weight: 700; font-size: 15px; color: var(--gold); flex: 1; }
+.modal-record { font-size: 12px; color: var(--text-dim); }
+.modal-close {
+  background: none; border: 1px solid var(--border2); color: var(--text-dim);
+  border-radius: 4px; padding: 3px 9px; font-size: 13px;
+}
+.modal-close:hover { border-color: var(--loss); color: var(--loss); }
+.modal-roster {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 14px;
+  overflow-y: auto; flex: 1;
+}

@@ -317,12 +317,12 @@ function getStarterPack() {
   }));
 }
 
-// Get effective stats accounting for star level
+// Get effective stats accounting for star level (no cap — 2★/3★ should be noticeably better)
 function getEffectiveStats(player) {
   const mult = CONFIG.STAR_MULTIPLIER[player.stars] || 1;
   const s = {};
   for (const [k, v] of Object.entries(player.stats)) {
-    s[k] = Math.min(99, Math.round(v * mult));
+    s[k] = Math.round(v * mult);
   }
   return s;
 }
