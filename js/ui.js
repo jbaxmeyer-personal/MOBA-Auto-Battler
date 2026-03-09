@@ -384,11 +384,7 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
   const fill = document.getElementById('advantage-fill');
   if (fill) { fill.style.transition = 'none'; fill.style.width = '50%'; }
 
-  // Reset gold bar
-  const goldFill = document.getElementById('gold-tug-fill');
-  if (goldFill) { goldFill.style.transition = 'none'; goldFill.style.left = '50%'; goldFill.style.right = '50%'; }
-  const goldTotals = document.getElementById('gold-totals');
-  if (goldTotals) goldTotals.style.display = 'none';
+  // (gold-tug-fill removed — SVG chart reset already done above)
 
   // Build the event queue: phase headers + events
   const PHASE_HEADERS = {
