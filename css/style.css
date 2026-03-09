@@ -495,18 +495,21 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .kda-tables {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
 }
 .kda-table {
-  flex: 1;
-  min-width: 200px;
+  flex: 1 1 0;
+  min-width: 0;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
 }
 .kda-table th, .kda-table td {
-  padding: 4px 7px;
+  padding: 4px 6px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .kda-table th { color: var(--text-dim); font-weight: 600; font-size: 11px; }
 .kda-table .blue-header { color: #4fc3f7; text-align: center; font-size: 12px; padding-bottom: 2px; }

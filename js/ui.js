@@ -578,6 +578,7 @@ function renderInlineResults(state, matchResult, won, income) {
       <h4 class="kda-title">Player KDA</h4>
       <div class="kda-tables">
         <table class="kda-table">
+          <colgroup><col style="width:38%"><col style="width:32%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
           <thead><tr><th colspan="5" class="blue-header">${state.teamName} (Blue)</th></tr>
           <tr><th>Player</th><th>Champion</th><th>K</th><th>D</th><th>A</th></tr></thead>
           <tbody>
@@ -585,6 +586,7 @@ function renderInlineResults(state, matchResult, won, income) {
           </tbody>
         </table>
         <table class="kda-table">
+          <colgroup><col style="width:38%"><col style="width:32%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
           <thead><tr><th colspan="5" class="red-header">${oppName} (Red)</th></tr>
           <tr><th>Player</th><th>Champion</th><th>K</th><th>D</th><th>A</th></tr></thead>
           <tbody>
