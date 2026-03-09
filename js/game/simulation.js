@@ -1,9 +1,9 @@
 // js/game/simulation.js — Match simulation engine
-// Pro LoL stat references:
-//   Total kills/game: ~18-25 (winner ~12-15, loser ~6-10)
-//   Winner towers: 7-11, Loser towers: 0-4
-//   Dragons: winner 2-4, loser 0-2. Baron: 0-2 (usually 1)
-//   Game length: 25-42 min (avg ~33 min)
+// Pro LoL stat references (calibrated vs real data 2024-2026):
+//   Total kills/game: ~26-32 (winner ~16-20, loser ~8-14)
+//   Total towers/game: ~10-13 (winner ~7-9, loser ~2-5)
+//   Dragons: 4-5 total both sides. Barons: 1-2 total both sides.
+//   Game length: 28-40 min (avg ~33 min). Gold per team: ~60-75k.
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ function calcTeamRatings(team) {
 function blueWinsEvent(blueScore, redScore, bConsistency, rConsistency) {
   const diff = (blueScore - redScore);
   // Scale: a 20-point rating difference → ±10% chance
-  const raw  = clamp(50 + diff * 0.4, 15, 85);
+  const raw  = clamp(50 + diff * 0.35, 15, 85);
   // Consistency reduces variance (tightens the range toward 50)
   const avgCons = (bConsistency + rConsistency) / 2 / 100;
   const adjusted = 50 + (raw - 50) * (1.2 - avgCons * 0.4);
@@ -285,8 +285,8 @@ function simulateMidGame(blue, red, bR, rR, advIn, events, tally) {
 
   // Mid-game teamfight (18–23 min)
   const tf1Blue   = blueWinsEvent(bR.tfRating, rR.tfRating, bR.consistency, rR.consistency);
-  const tf1Kills  = randInt(2, 5);
-  const tf1Deaths = randInt(0, Math.max(0, tf1Kills - 1));
+  const tf1Kills  = randInt(3, 7);
+  const tf1Deaths = randInt(1, Math.max(1, tf1Kills - 1));
   adv = clamp(adv + (tf1Blue ? tf1Kills * 1.4 : -tf1Kills * 1.4), 5, 95);
   for (let i = 0; i < tf1Kills;  i++) recordKill(tally, tf1Blue ? 'blue' : 'red', tf1Blue ? 'red' : 'blue');
   for (let i = 0; i < tf1Deaths; i++) recordKill(tally, tf1Blue ? 'red' : 'blue', tf1Blue ? 'blue' : 'red');
@@ -294,14 +294,35 @@ function simulateMidGame(blue, red, bR, rR, advIn, events, tally) {
     text: `💥 Teamfight breaks out near Dragon pit — ${tf1Blue ? 'Blue' : 'Red'} side wins ${tf1Kills}-for-${tf1Deaths}! ${randPlayer(tf1Blue ? blue : red)} was massive.`,
     type: 'teamfight', phase: 'midgame', tfBlueKills: tf1Blue ? tf1Kills : tf1Deaths, tfRedKills: tf1Blue ? tf1Deaths : tf1Kills, advAfter: adv, goldDiff: tally.goldDiff });
 
-  // Dragon 2 (21–25 min)
+  // Dragon 2 (21–25 min) — 50% chance of a fight
   const d2Blue = blueWinsEvent(objectiveRating(bR) + (adv > 55 ? 5 : 0),
                                 objectiveRating(rR) + (adv < 45 ? 5 : 0),
                                 bR.consistency, rR.consistency);
   const d2Type = drakes[dIdx++] || drakes[0];
   adv = clamp(adv + (d2Blue ? 5 : -5), 5, 95);
   recordObj(tally, 'dragon', d2Blue);
-  events.push({ time: padTime(randInt(21,25), randInt(0,59)), text: `🐉 ${d2Type} Dragon secured by ${d2Blue ? 'blue' : 'red'} side after a quick rotate.`, type: 'objective', phase: 'midgame', dragonBlue: d2Blue, advAfter: adv, goldDiff: tally.goldDiff });
+  if (chance(50)) {
+    const d2Kills = randInt(1, 3);
+    for (let i = 0; i < d2Kills; i++) recordKill(tally, d2Blue ? 'blue' : 'red', d2Blue ? 'red' : 'blue');
+    events.push({ time: padTime(randInt(21,25), randInt(0,59)), text: `🐉 ${d2Type} Dragon contested — ${d2Blue ? 'Blue' : 'Red'} side wins the fight ${d2Kills}-for-0 and secures the drake!`, type: 'objective', phase: 'midgame', dragonBlue: d2Blue, killBlue: d2Blue, advAfter: adv, goldDiff: tally.goldDiff });
+  } else {
+    events.push({ time: padTime(randInt(21,25), randInt(0,59)), text: `🐉 ${d2Type} Dragon secured by ${d2Blue ? 'blue' : 'red'} side after a quick rotate.`, type: 'objective', phase: 'midgame', dragonBlue: d2Blue, advAfter: adv, goldDiff: tally.goldDiff });
+  }
+
+  // Second mid-game skirmish (24–27 min) — 70% chance
+  if (chance(70)) {
+    const sk2Blue   = blueWinsEvent(bR.tfRating, rR.tfRating, bR.consistency, rR.consistency);
+    const sk2Kills  = randInt(2, 5);
+    const sk2Deaths = randInt(0, Math.max(0, sk2Kills - 1));
+    adv = clamp(adv + (sk2Blue ? sk2Kills : -sk2Kills), 5, 95);
+    for (let i = 0; i < sk2Kills;  i++) recordKill(tally, sk2Blue ? 'blue' : 'red', sk2Blue ? 'red' : 'blue');
+    for (let i = 0; i < sk2Deaths; i++) recordKill(tally, sk2Blue ? 'red' : 'blue', sk2Blue ? 'blue' : 'red');
+    if (chance(40)) recordObj(tally, 'tower', sk2Blue);
+    const sk2Player = randPlayer(sk2Blue ? blue : red);
+    events.push({ time: padTime(randInt(24,27), randInt(0,59)),
+      text: `💥 ${sk2Blue ? 'Blue' : 'Red'} side wins a ${sk2Kills}-for-${sk2Deaths} skirmish — ${sk2Player} extends the lead!`,
+      type: 'teamfight', phase: 'midgame', tfBlueKills: sk2Blue ? sk2Kills : sk2Deaths, tfRedKills: sk2Blue ? sk2Deaths : sk2Kills, advAfter: adv, goldDiff: tally.goldDiff });
+  }
 
   return { adv, drakes, dIdx };
 }
@@ -376,12 +397,15 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
     rR.tfRating + (!baronWinner ? 18 : 0),
     bR.consistency, rR.consistency
   );
-  const pushKills = randInt(2, 5);
+  const pushKills = randInt(3, 6);
   const pushLoss  = randInt(0, Math.max(0, pushKills - 2));
   adv = clamp(adv + (pushBlue ? pushKills * 1.6 : -pushKills * 1.6), 5, 95);
   const inhibLane = ['top', 'mid', 'bot'][randInt(0,2)];
   for (let i = 0; i < pushKills; i++) recordKill(tally, pushBlue ? 'blue' : 'red', pushBlue ? 'red' : 'blue');
   for (let i = 0; i < pushLoss;  i++) recordKill(tally, pushBlue ? 'red' : 'blue', pushBlue ? 'blue' : 'red');
+  // Baron push destroys the outer tower + inhibitor tower (2–3 structures)
+  const pushTowers = randInt(2, 3);
+  for (let i = 0; i < pushTowers; i++) recordObj(tally, 'tower', pushBlue);
   events.push({ time: padTime(pushMin, randInt(0,59)),
     text: `💥 ${pushBlue?'Blue':'Red'} side uses Baron buff to win ${pushKills}-for-${pushLoss} — ${inhibLane} inhibitor falls!`,
     type: 'teamfight', phase: 'lategame', tfBlueKills: pushBlue ? pushKills : pushLoss, tfRedKills: pushBlue ? pushLoss : pushKills, advAfter: adv, goldDiff: tally.goldDiff });
@@ -417,7 +441,7 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
       type: 'teamfight', phase: 'lategame', tfBlueKills: blueWins ? 5 : 0, tfRedKills: blueWins ? 0 : 5, advAfter: adv, goldDiff: tally.goldDiff });
   } else {
     blueWins = finalBlue;
-    const finalKills = randInt(2, 5);
+    const finalKills = randInt(3, 6);
     const finalLoss  = randInt(0, Math.max(0, finalKills - 1));
     const mvp        = playerWithChamp(blueWins ? blue : red, ['mid','adc'][randInt(0,1)]);
     adv = clamp(adv + (blueWins ? finalKills * 1.5 : -finalKills * 1.5), 5, 95);
@@ -427,6 +451,10 @@ function simulateLateGame(blue, red, bR, rR, advIn, events, drakes, dIdx, tally)
       text: `💥 Final teamfight — ${blueWins ? 'Blue' : 'Red'} side wins ${finalKills}-for-${finalLoss}! ${mvp} absolutely pops off — the base is open!`,
       type: 'teamfight', phase: 'lategame', tfBlueKills: blueWins ? finalKills : finalLoss, tfRedKills: blueWins ? finalLoss : finalKills, advAfter: adv, goldDiff: tally.goldDiff });
   }
+
+  // Winning side destroys the 2 base towers on the way to nexus
+  recordObj(tally, 'tower', blueWins);
+  recordObj(tally, 'tower', blueWins);
 
   // Nexus falls 1–3 min after the final fight — always, no exceptions
   const nexusMin = finalTFMin + randInt(1, 3);

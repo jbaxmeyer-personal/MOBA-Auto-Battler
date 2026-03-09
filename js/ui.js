@@ -500,7 +500,7 @@ function startPlayByPlay(matchResult, blueTeamName, redTeamName) {
     if (gt && gbt && grt && matchResult.stats) {
       const bg = matchResult.stats.blue.gold;
       const rg = matchResult.stats.red.gold;
-      if (bg > 15000 && rg > 15000) {
+      if (bg > 55000 && rg > 55000) {
         gbt.textContent = `💰 Blue: ${(bg/1000).toFixed(1)}k`;
         grt.textContent = `Red: ${(rg/1000).toFixed(1)}k 💰`;
         gt.style.display = 'flex';
