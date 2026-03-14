@@ -1181,7 +1181,9 @@ function runBossFight() {
 
 // ─── SECTION 13: Main simulateMatch ───────────────────────────────────────────
 
-function simulateMatch(blueTeamArr, redTeamArr, blueName, redName) {
+// preDraft is optional — pass the draft shown on the draft screen so the
+// simulation uses exactly what the player saw (avoids a second random draft).
+function simulateMatch(blueTeamArr, redTeamArr, blueName, redName, preDraft) {
   // Resolve team playstyles from live G state when available
   var blueStyle = 'engage', redStyle = 'engage';
   if (typeof G !== 'undefined' && G) {
@@ -1192,8 +1194,8 @@ function simulateMatch(blueTeamArr, redTeamArr, blueName, redName) {
     if (redTeamId  && G.teams[redTeamId])  redStyle  = G.teams[redTeamId].tactics.playstyle  || 'engage';
   }
 
-  // Build draft first — counter score feeds into win probability
-  var draft = draftChampions(blueTeamArr, redTeamArr);
+  // Use pre-built draft if provided (avoids double-drafting when player saw the draft screen)
+  var draft = preDraft || draftChampions(blueTeamArr, redTeamArr);
 
   // Pre-determine match winner: role power + playstyle bonus + draft counter edge
   var bPow = blueTeamArr.reduce(function(s,pl) { return s + (pl ? calcRolePower(pl) : 10); }, 0);

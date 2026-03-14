@@ -70,9 +70,9 @@ function onPlayMatch() {
 
 function onStartMatch() {
   if (!_matchContext) return;
-  const { blueRoster, redRoster, blueName, redName } = _matchContext;
+  const { blueRoster, redRoster, blueName, redName, draft } = _matchContext;
 
-  _matchResult = simulateMatch(blueRoster, redRoster, blueName, redName);
+  _matchResult = simulateMatch(blueRoster, redRoster, blueName, redName, draft);
 
   document.getElementById('draft-phase').style.display   = 'none';
   document.getElementById('pbp-container').style.display = 'block';
@@ -85,9 +85,9 @@ function onStartMatch() {
 
 function onSkipMatch() {
   if (!_matchContext) return;
-  const { blueRoster, redRoster, blueName, redName } = _matchContext;
+  const { blueRoster, redRoster, blueName, redName, draft } = _matchContext;
 
-  _matchResult = simulateMatch(blueRoster, redRoster, blueName, redName);
+  _matchResult = simulateMatch(blueRoster, redRoster, blueName, redName, draft);
 
   document.getElementById('draft-phase').style.display   = 'none';
   document.getElementById('pbp-container').style.display = 'block';
