@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const POSITIONS = ['top', 'jungle', 'mid', 'adc', 'support'];
+  const POSITIONS = ['vanguard', 'ranger', 'arcanist', 'hunter', 'warden'];
 
   // ── Module state ─────────────────────────────────────────────────────────────
 
@@ -15,17 +15,17 @@
 
   // Base anchor per dot — wander jitters around this
   const _base = {
-    blue: { top:{x:28,y:165},  jungle:{x:82,y:170},  mid:{x:92,y:208},  adc:{x:72,y:268},   support:{x:90,y:274}  },
-    red:  { top:{x:272,y:45},  jungle:{x:218,y:132}, mid:{x:208,y:92},  adc:{x:228,y:268},  support:{x:210,y:274} },
+    blue: { vanguard:{x:28,y:165}, ranger:{x:82,y:170}, arcanist:{x:92,y:208}, hunter:{x:72,y:268},  warden:{x:90,y:274}  },
+    red:  { vanguard:{x:272,y:45}, ranger:{x:218,y:132},arcanist:{x:208,y:92}, hunter:{x:228,y:268}, warden:{x:210,y:274} },
   };
 
   // Wander radius per role
-  const _wRadius = { top:9, jungle:13, mid:9, adc:7, support:6 };
+  const _wRadius = { vanguard:9, ranger:13, arcanist:9, hunter:7, warden:6 };
 
   // Dead status (used to suppress wander for dead dots)
   const _dead = {
-    blue: { top:false, jungle:false, mid:false, adc:false, support:false },
-    red:  { top:false, jungle:false, mid:false, adc:false, support:false },
+    blue: { vanguard:false, ranger:false, arcanist:false, hunter:false, warden:false },
+    red:  { vanguard:false, ranger:false, arcanist:false, hunter:false, warden:false },
   };
 
   // ── Public API ───────────────────────────────────────────────────────────────
@@ -40,8 +40,8 @@
     });
     // Reset to laning positions
     applyPositions({
-      blue: { top:{x:28,y:165,alive:true}, jungle:{x:82,y:170,alive:true}, mid:{x:92,y:208,alive:true}, adc:{x:72,y:268,alive:true},  support:{x:90,y:274,alive:true}  },
-      red:  { top:{x:272,y:45,alive:true}, jungle:{x:218,y:132,alive:true},mid:{x:208,y:92,alive:true}, adc:{x:228,y:268,alive:true}, support:{x:210,y:274,alive:true} },
+      blue: { vanguard:{x:28,y:165,alive:true}, ranger:{x:82,y:170,alive:true}, arcanist:{x:92,y:208,alive:true}, hunter:{x:72,y:268,alive:true},  warden:{x:90,y:274,alive:true}  },
+      red:  { vanguard:{x:272,y:45,alive:true}, ranger:{x:218,y:132,alive:true},arcanist:{x:208,y:92,alive:true}, hunter:{x:228,y:268,alive:true}, warden:{x:210,y:274,alive:true} },
     });
     startWander();
   };
@@ -96,10 +96,10 @@
   function flashForEvent(ev) {
     let cx, cy, color;
 
-    if (ev.baronBlue !== undefined) {
-      cx = 78; cy = 78; color = '#9b59b6';
-    } else if (ev.dragonBlue !== undefined) {
-      cx = 222; cy = 222; color = '#c89b3c';
+    if (ev.wardenBlue !== undefined || ev.wardenRed !== undefined) {
+      cx = 150; cy = 150; color = '#9b59b6';  // Grove Warden — center
+    } else if (ev.shrineBlue !== undefined || ev.shrineRed !== undefined) {
+      cx = 80; cy = 80; color = '#c89b3c';    // Ley Shrine — north area
     } else if (ev.type === 'result') {
       const blueWon = (ev.advAfter || 50) >= 50;
       cx = blueWon ? 278 : 22;

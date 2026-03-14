@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Rift Manager</title>
+  <title>Grove Manager</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -13,12 +13,12 @@
      ══════════════════════════════════════════════════════════════════ -->
 <div id="screen-intro" class="screen intro-screen active">
   <div class="intro-logo">
-    <div class="intro-title">RIFT MANAGER</div>
-    <div class="intro-sub">The LoL Esports Career Simulation</div>
+    <div class="intro-title">GROVE MANAGER</div>
+    <div class="intro-sub">The Ancient Grove Esports Career Simulation</div>
   </div>
   <div class="intro-card">
     <h2>Select Your Team</h2>
-    <p class="intro-hint">You are joining the LCS as a first-time head coach. Choose your team wisely.</p>
+    <p class="intro-hint">You are joining the Verdant League as a first-time head coach. Choose your team wisely.</p>
     <div id="team-select-grid" class="team-select-grid"></div>
     <button class="btn-start" id="btn-start" disabled onclick="onStartGame()">Start Career</button>
   </div>
@@ -142,7 +142,7 @@
         <div class="coming-soon">
           <div class="cs-icon">🔭</div>
           <div class="cs-title">Scouting Network</div>
-          <div class="cs-desc">Send scouts to LCK, LPL, LEC and beyond to uncover hidden talent. Coming soon.</div>
+          <div class="cs-desc">Send scouts across the Grove circuit to uncover hidden talent in lower divisions and challenger ladders. Coming soon.</div>
         </div>
       </div>
 
@@ -154,7 +154,7 @@
 
       <!-- LEAGUE -->
       <div id="panel-league" class="panel">
-        <div class="panel-header">LCS — Spring Split 2025</div>
+        <div class="panel-header" id="panel-league-header">Verdant League</div>
         <div id="league-content"></div>
       </div>
 
@@ -182,12 +182,12 @@
     </div>
     <div class="match-live-score">
       <span id="score-blue-kills">0K</span>
-      <span id="score-blue-dragons">🐉0</span>
-      <span id="score-blue-towers">🏰0</span>
+      <span id="score-blue-shrines">🌿0</span>
+      <span id="score-blue-roots">🌳0</span>
       <span class="score-divider">·</span>
       <span id="score-red-kills">0K</span>
-      <span id="score-red-dragons">🐉0</span>
-      <span id="score-red-towers">🏰0</span>
+      <span id="score-red-shrines">🌿0</span>
+      <span id="score-red-roots">🌳0</span>
     </div>
     <div id="score-bar-wrap" class="score-bar-wrap">
       <div id="advantage-fill" class="advantage-fill" style="width:50%"></div>
@@ -213,9 +213,9 @@
           <rect width="300" height="300" fill="#0d1f0d" rx="4"/>
           <line x1="0" y1="300" x2="300" y2="0" stroke="#1a3a1a" stroke-width="28"/>
           <ellipse cx="78" cy="78" rx="22" ry="18" fill="#1a2a3a" stroke="#2a3a5a" stroke-width="1.5"/>
-          <text x="78" y="82" text-anchor="middle" font-size="9" fill="#4a6a8a">BARON</text>
+          <text x="78" y="82" text-anchor="middle" font-size="9" fill="#4a6a8a">WARDEN</text>
           <ellipse cx="222" cy="222" rx="22" ry="18" fill="#2a1a0a" stroke="#4a3a1a" stroke-width="1.5"/>
-          <text x="222" y="226" text-anchor="middle" font-size="9" fill="#8a6a2a">DRAKE</text>
+          <text x="222" y="226" text-anchor="middle" font-size="9" fill="#8a6a2a">SHRINE</text>
           <rect x="2" y="240" width="58" height="58" rx="4" fill="#0d1a2a" stroke="#1e3050" stroke-width="1.5"/>
           <text x="31" y="274" text-anchor="middle" font-size="8" fill="#4fc3f7">BASE</text>
           <rect x="240" y="2" width="58" height="58" rx="4" fill="#2a0d0d" stroke="#501e1e" stroke-width="1.5"/>
@@ -224,31 +224,31 @@
           <polyline points="18,240 18,18 240,18" fill="none" stroke="#1a3a1a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
           <polyline points="60,282 282,282 282,60" fill="none" stroke="#1a3a1a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
           <circle id="map-event-ring" cx="150" cy="150" r="0" fill="none" stroke="#fff" stroke-width="2.5" opacity="0"/>
-          <circle id="map-b-top"     class="map-dot map-dot-blue" cx="28"  cy="165" r="7"/>
-          <circle id="map-b-jungle"  class="map-dot map-dot-blue" cx="82"  cy="170" r="7"/>
-          <circle id="map-b-mid"     class="map-dot map-dot-blue" cx="92"  cy="208" r="7"/>
-          <circle id="map-b-adc"     class="map-dot map-dot-blue" cx="72"  cy="268" r="7"/>
-          <circle id="map-b-support" class="map-dot map-dot-blue" cx="90"  cy="274" r="7"/>
-          <text id="map-b-top-lbl"     class="map-dot-lbl" x="28"  y="169">T</text>
-          <text id="map-b-jungle-lbl"  class="map-dot-lbl" x="82"  y="174">J</text>
-          <text id="map-b-mid-lbl"     class="map-dot-lbl" x="92"  y="212">M</text>
-          <text id="map-b-adc-lbl"     class="map-dot-lbl" x="72"  y="272">A</text>
-          <text id="map-b-support-lbl" class="map-dot-lbl" x="90"  y="278">S</text>
-          <circle id="map-r-top"     class="map-dot map-dot-red" cx="272" cy="45"  r="7"/>
-          <circle id="map-r-jungle"  class="map-dot map-dot-red" cx="218" cy="132" r="7"/>
-          <circle id="map-r-mid"     class="map-dot map-dot-red" cx="208" cy="92"  r="7"/>
-          <circle id="map-r-adc"     class="map-dot map-dot-red" cx="228" cy="268" r="7"/>
-          <circle id="map-r-support" class="map-dot map-dot-red" cx="210" cy="274" r="7"/>
-          <text id="map-r-top-lbl"     class="map-dot-lbl" x="272" y="49">T</text>
-          <text id="map-r-jungle-lbl"  class="map-dot-lbl" x="218" y="136">J</text>
-          <text id="map-r-mid-lbl"     class="map-dot-lbl" x="208" y="96">M</text>
-          <text id="map-r-adc-lbl"     class="map-dot-lbl" x="228" y="272">A</text>
-          <text id="map-r-support-lbl" class="map-dot-lbl" x="210" y="278">S</text>
+          <circle id="map-b-vanguard"  class="map-dot map-dot-blue" cx="28"  cy="165" r="7"/>
+          <circle id="map-b-ranger"    class="map-dot map-dot-blue" cx="82"  cy="170" r="7"/>
+          <circle id="map-b-arcanist"  class="map-dot map-dot-blue" cx="92"  cy="208" r="7"/>
+          <circle id="map-b-hunter"    class="map-dot map-dot-blue" cx="72"  cy="268" r="7"/>
+          <circle id="map-b-warden"    class="map-dot map-dot-blue" cx="90"  cy="274" r="7"/>
+          <text id="map-b-vanguard-lbl"  class="map-dot-lbl" x="28"  y="169">V</text>
+          <text id="map-b-ranger-lbl"    class="map-dot-lbl" x="82"  y="174">R</text>
+          <text id="map-b-arcanist-lbl"  class="map-dot-lbl" x="92"  y="212">A</text>
+          <text id="map-b-hunter-lbl"    class="map-dot-lbl" x="72"  y="272">H</text>
+          <text id="map-b-warden-lbl"    class="map-dot-lbl" x="90"  y="278">W</text>
+          <circle id="map-r-vanguard"  class="map-dot map-dot-red" cx="272" cy="45"  r="7"/>
+          <circle id="map-r-ranger"    class="map-dot map-dot-red" cx="218" cy="132" r="7"/>
+          <circle id="map-r-arcanist"  class="map-dot map-dot-red" cx="208" cy="92"  r="7"/>
+          <circle id="map-r-hunter"    class="map-dot map-dot-red" cx="228" cy="268" r="7"/>
+          <circle id="map-r-warden"    class="map-dot map-dot-red" cx="210" cy="274" r="7"/>
+          <text id="map-r-vanguard-lbl"  class="map-dot-lbl" x="272" y="49">V</text>
+          <text id="map-r-ranger-lbl"    class="map-dot-lbl" x="218" y="136">R</text>
+          <text id="map-r-arcanist-lbl"  class="map-dot-lbl" x="208" y="96">A</text>
+          <text id="map-r-hunter-lbl"    class="map-dot-lbl" x="228" y="272">H</text>
+          <text id="map-r-warden-lbl"    class="map-dot-lbl" x="210" y="278">W</text>
         </svg>
         <div class="pbp-map-legend">
           <span class="map-leg-blue">● Blue</span>
           <span class="map-leg-red">● Red</span>
-          <span class="map-leg-dim">T J M A S</span>
+          <span class="map-leg-dim">V R A H W</span>
         </div>
         <div class="gold-chart-wrap">
           <div class="gold-chart-label">Gold Lead</div>

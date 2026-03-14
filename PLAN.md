@@ -80,10 +80,10 @@ Keep FM 12-attribute schema. Update:
 
 ---
 
-## Phase 2 — FM Shell Completion
+## Phase 2 — FM Shell Completion ✅ DONE
 **Goal:** Get a working, playable FM shell using TAG data (no LoL references anywhere).
-**Files:** `css/style.css`, `js/ui.js`, `js/main.js`
-**Status:** [ ] Not started (Task #3 from TASKS.md, reframed for TAG)
+**Files:** `css/style.css`, `js/ui.js`, `js/main.js`, `js/game/simulation.js`, `js/ui/map.js`, `index.html`
+**Status:** [x] Complete
 
 This is largely the same as TASKS.md Task #3 but with TAG data. Key difference: all position labels, champion names, team names must reference TAG, not LoL.
 
@@ -442,3 +442,4 @@ GAME_DESIGN.md        — Management game design (update to remove LoL refs)
 |---|---|---|
 | 2026-03-14 | #1 | Researched TFM2, designed TAG MOBA, wrote PLAN.md + THE_ANCIENT_GROVE.md |
 | 2026-03-14 | #2 | **Phase 1 complete** — champions.js (30 TAG champs), teams.js (8 VL teams), players.js (45 players), state.js (POSITIONS/names/weeks updated). Validated: all positions covered, all champion refs valid, overall range 43–85. |
+| 2026-03-14 | #3 | **Phase 2 complete** — Full FM shell. index.html (titles/SVG/score labels updated), css/style.css (FM layout appended), js/ui.js (all render fns: dashboard, squad, player profile, tactics, transfers, finances, league, schedule, draft), js/main.js (game loop: team select, advance week, play/skip match, PBP, return from match), js/game/simulation.js (TAG Phase 2 sim engine), js/ui/map.js (position names updated to TAG). Full game loop playable: intro → team select → dashboard → advance week → play match → PBP → result → back to dashboard. |
