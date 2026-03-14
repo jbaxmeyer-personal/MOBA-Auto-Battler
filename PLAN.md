@@ -12,7 +12,7 @@
 | Sim Engine | ✅ Done | Stat-driven FM engine complete — Phase 4 done |
 | Data Layer | ✅ Done | 30 TAG champs, 8 VL teams, 45 players — Phase 1 complete |
 | Map Visualization | ⚠️ Placeholder | Current LoL-style SVG; hex map rewrite is Phase 3 |
-| Draft System | ⚠️ Basic | Random picks from player pools; full ban/pick is Phase 5 |
+| Draft System | ✅ Done | Smart ban/pick + class counters + UI — Phase 5 done |
 | Series Format | ❌ Not started | Currently single-game; BO3/BO5 is Phase 7 |
 | Management Depth | ❌ Not started | Training, personality, transfers, finances, fans — Phase 6 |
 | Career Structure | ⚠️ Partial | 1 region, 7-week Spring split, no playoffs — Phase 7 |
@@ -29,7 +29,7 @@ Phase 1 → Data Layer Pivot       (replace all LoL data with TAG data)         
 Phase 2 → FM Shell Completion    (finish the UI using TAG data)                  ✅ DONE
 Phase 3 → Hex Map                (replace LoL map with TAG hex map)
 Phase 4 → Sim Engine Rewrite     (rebuild around TAG mechanics)          ✅ DONE
-Phase 5 → Draft System           (TAG champion select + synergies)
+Phase 5 → Draft System           (TAG champion select + synergies)        ✅ DONE
 Phase 6 → Management Depth       (training, personality, transfers, finances, fans)
 Phase 7 → Career Structure       (BO3/BO5 series, full playoffs, multi-season, save/load)
 Phase 8 → Balance & Polish       (meta system, UI polish, playtesting)
@@ -249,7 +249,7 @@ bossKill (game end)
 ## Phase 5 — Draft System
 **Goal:** TAG-accurate champion select with ban/pick, synergies, and counters.
 **Files:** `js/game/simulation.js` (draftChampions function), `js/ui.js` (renderMatchDraft)
-**Status:** [ ] Not started
+**Status:** ✅ Complete (5A–5D implemented)
 
 ### 5A — Draft Logic
 - 5 bans per side (10 total), then 10 picks alternating
