@@ -9,7 +9,7 @@
 | Layer | Status | Notes |
 |---|---|---|
 | FM Shell (HTML/CSS/UI) | ✅ Done | Full TAG shell — Phase 2 complete |
-| Sim Engine | ⚠️ Placeholder | Phase 2 sim works; full TAG rewrite is Phase 4 |
+| Sim Engine | ✅ Done | Stat-driven FM engine complete — Phase 4 done |
 | Data Layer | ✅ Done | 30 TAG champs, 8 VL teams, 45 players — Phase 1 complete |
 | Map Visualization | ⚠️ Placeholder | Current LoL-style SVG; hex map rewrite is Phase 3 |
 | Draft System | ⚠️ Basic | Random picks from player pools; full ban/pick is Phase 5 |
@@ -28,7 +28,7 @@
 Phase 1 → Data Layer Pivot       (replace all LoL data with TAG data)           ✅ DONE
 Phase 2 → FM Shell Completion    (finish the UI using TAG data)                  ✅ DONE
 Phase 3 → Hex Map                (replace LoL map with TAG hex map)
-Phase 4 → Sim Engine Rewrite     (rebuild around TAG mechanics)
+Phase 4 → Sim Engine Rewrite     (rebuild around TAG mechanics)          ✅ DONE
 Phase 5 → Draft System           (TAG champion select + synergies)
 Phase 6 → Management Depth       (training, personality, transfers, finances, fans)
 Phase 7 → Career Structure       (BO3/BO5 series, full playoffs, multi-season, save/load)
@@ -142,7 +142,7 @@ TAG-specific map events to visualize:
 ## Phase 4 — Sim Engine Rewrite
 **Goal:** Rebuild simulation.js from scratch around TAG mechanics. This is the highest-priority quality work.
 **Files:** `js/game/simulation.js` (full rewrite)
-**Status:** [ ] Not started
+**Status:** ✅ Complete (4A–4E implemented)
 
 This is the core of the game. The engine must make **stat impact legible** — the community's #1 complaint about TFM2.
 
