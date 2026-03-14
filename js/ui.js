@@ -488,31 +488,92 @@ function renderSchedule() {
 
 // ─── Match Draft Display ──────────────────────────────────────────────────────
 
+// Class abbreviation badge shown next to each champion name
+const CLASS_BADGE = {
+  Tank:      { label:'TK', color:'#4fc3f7' },
+  Fighter:   { label:'FT', color:'#ff9800' },
+  Assassin:  { label:'AS', color:'#e040fb' },
+  Mage:      { label:'MG', color:'#40c4ff' },
+  Marksman:  { label:'MM', color:'#69f0ae' },
+  Sentinel:  { label:'SN', color:'#ffd740' },
+};
+
+function classBadge(champClass) {
+  const b = CLASS_BADGE[champClass];
+  if (!b) return '';
+  return `<span class="class-badge" style="color:${b.color};border-color:${b.color}">${b.label}</span>`;
+}
+
 function renderMatchDraft(blueTeamName, redTeamName, draftResult) {
   if (!draftResult) return;
   setText('match-team-blue', blueTeamName);
   setText('match-team-red', redTeamName);
 
-  const col = (picks, side) => `
+  // ── Bans row ──────────────────────────────────────────────────────────────
+  const bans = draftResult.bans || { blue: [], red: [] };
+  const banChip = (c, side) =>
+    `<span class="ban-chip ban-chip-${side}" title="${c}">${c}</span>`;
+  setHtml('draft-bans',
+    `<div class="ban-row">
+      <span class="ban-row-label blue-text">Bans:</span>
+      ${bans.blue.map(c => banChip(c,'blue')).join('')}
+      <span class="ban-row-sep">·</span>
+      ${bans.red.map(c => banChip(c,'red')).join('')}
+      <span class="ban-row-label red-text">:Bans</span>
+    </div>`
+  );
+
+  // ── Build counter map: which champions are countered by the other side ────
+  const enemyClasses = (picks) =>
+    picks.map(p => p.champClass).filter(Boolean);
+  const COUNTERED_BY_UI = {
+    Tank:['Marksman'], Fighter:['Mage'], Mage:['Assassin'],
+    Marksman:['Assassin','Tank'], Assassin:['Tank','Sentinel'], Sentinel:['Assassin','Mage'],
+  };
+  const isCountered = (champClass, foeClasses) => {
+    const counters = COUNTERED_BY_UI[champClass] || [];
+    return counters.some(c => foeClasses.includes(c));
+  };
+
+  const blueEnemyClasses = enemyClasses(draftResult.red);
+  const redEnemyClasses  = enemyClasses(draftResult.blue);
+
+  // ── Picks columns ─────────────────────────────────────────────────────────
+  const col = (picks, side, foeClasses) => `
     <div class="draft-col">
       <div class="draft-col-label ${side === 'blue' ? 'blue-text' : 'red-text'}">${side === 'blue' ? blueTeamName : redTeamName}</div>
-      ${picks.map(p => `
-        <div class="draft-pick">
+      ${picks.map(p => {
+        const countered = p.champClass && isCountered(p.champClass, foeClasses);
+        return `
+        <div class="draft-pick${countered ? ' pick-countered' : ''}">
           <span class="pick-pos">${posIcon(p.pos)}</span>
           <span class="pick-player">${p.player ? p.player.name : '—'}</span>
           <span class="pick-champ">${p.champion}</span>
-        </div>
-      `).join('')}
+          ${classBadge(p.champClass)}
+          ${countered ? '<span class="counter-flag" title="Countered by enemy">⚠</span>' : ''}
+        </div>`;
+      }).join('')}
     </div>`;
 
-  setHtml('draft-picks', col(draftResult.blue, 'blue') + col(draftResult.red, 'red'));
+  setHtml('draft-picks',
+    col(draftResult.blue, 'blue', blueEnemyClasses) +
+    col(draftResult.red,  'red',  redEnemyClasses)
+  );
 
+  // ── Synergies + counter score ─────────────────────────────────────────────
   const synBadges = (syns, side) => syns.map(s =>
     `<span class="synergy ${side}-syn">${s.name}: ${s.desc}</span>`
   ).join('');
+  const cs = draftResult.counterScore || 0;
+  const csLine = Math.abs(cs) >= 0.5
+    ? `<span class="counter-score ${cs > 0 ? 'blue-text' : 'red-text'}">
+        ${cs > 0 ? blueTeamName : redTeamName} has the counter edge
+       </span>`
+    : '';
   setHtml('comp-synergies',
     synBadges(draftResult.blueSynergies || [], 'blue') +
-    synBadges(draftResult.redSynergies  || [], 'red')
+    synBadges(draftResult.redSynergies  || [], 'red') +
+    csLine
   );
 }
 
