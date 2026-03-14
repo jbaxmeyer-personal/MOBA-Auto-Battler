@@ -319,6 +319,20 @@ Personality affects: training gains, morale events, locker room chemistry, perfo
 - Reports show: position, overall range (not exact), age, personality hint
 - Unlock full profile after scouting
 
+### 6G — Financials
+- Team buget
+- Gain sponsors that come with base money per week as well as bonus opportunities (reach x number of fans, win x number of games, etc.)
+- FM-style
+- Shows a total and a week-by-week trend
+
+### 6H — Fans
+- Streaming helps increase number of fans
+- Winning matches helps increase fans
+- Running fan events increase fans (cost money and take away from rest/training)
+- Running road-shows increase fans (high cost and greatly take away from rest/training) 
+- Updates each week
+- Shows a total and a week-by-week trend
+
 ---
 
 ## Phase 7 — Career Structure
