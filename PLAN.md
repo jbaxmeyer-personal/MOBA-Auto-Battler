@@ -38,10 +38,12 @@ Each phase is designed to be completable in 1–2 sessions. Earlier phases are p
 
 ---
 
-## Phase 1 — Data Layer Pivot
+## Phase 1 — Data Layer Pivot ✅ DONE
 **Goal:** Replace all LoL-specific data with The Ancient Grove equivalents.
 **Files:** `js/data/champions.js`, `js/data/teams.js`, `js/data/players.js`
-**Status:** [ ] Not started
+**Status:** [x] Complete — commit cf34ab1
+
+**Status: COMPLETE ✓** — committed cf34ab1
 
 ### 1A — Champions (champions.js)
 Replace the LoL champion pool with ~30 original TAG champions.
@@ -424,5 +426,5 @@ GAME_DESIGN.md        — Management game design (update to remove LoL refs)
 
 | Date | Session | Work Done |
 |---|---|---|
-| 2026-03-14 | #1 | Researched TFM2, designed TAG MOBA, wrote PLAN.md |
-| | | |
+| 2026-03-14 | #1 | Researched TFM2, designed TAG MOBA, wrote PLAN.md + THE_ANCIENT_GROVE.md |
+| 2026-03-14 | #2 | **Phase 1 complete** — champions.js (30 TAG champs), teams.js (8 VL teams), players.js (45 players), state.js (POSITIONS/names/weeks updated). Validated: all positions covered, all champion refs valid, overall range 43–85. |
