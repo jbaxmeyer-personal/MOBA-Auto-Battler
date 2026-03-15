@@ -110,42 +110,34 @@ const AI_PERSONALITY_KEYS = ['aggressive', 'balanced', 'conservative'];
 function delegateToAnalyst(humanCompType, enemyCompType) {
   if (!G) return;
   const team = G.teams[G.humanTeamId];
-  const analyst = (G.staff || []).find(s => s.role === 'analyst');
+  const ac = (G.staff || []).find(s => s.role === 'analyst');
 
-  // Base preset for your comp
-  const basePreset = TACTICS_COMP_PRESETS[humanCompType] || TACTICS_COMP_PRESETS['ENGAGE'];
-  // Enemy-aware preset
-  const enemyPreset = TACTICS_COMP_PRESETS[enemyCompType] || null;
+  // Base preset for your comp — always deterministic
+  const basePreset  = TACTICS_COMP_PRESETS[humanCompType] || TACTICS_COMP_PRESETS['ENGAGE'];
+  const enemyPreset = enemyCompType ? (TACTICS_COMP_PRESETS[enemyCompType] || null) : null;
 
-  // Quality of analyst affects how much we optimize vs just using base comp preset
-  const analystDR = analyst ? (analyst.attrs?.draftReading ?? analyst.stat ?? 10) : 0;
-  // 0-stat = pure random noise; 20-stat = near-optimal
-  const quality = analystDR / 20; // 0.0 – 1.0
+  // Assistant Coach's draftReading stat determines how well they counter the enemy comp.
+  // < 14: just apply base comp preset as-is (no enemy adaptation)
+  // >= 14: merge enemy-countering adjustments into the base preset
+  const acStat = ac ? (ac.attrs?.draftReading ?? ac.stat ?? 10) : 10;
+  const applyCounterAdapt = acStat >= 14 && enemyPreset;
 
-  // Build merged tactics
   const keys = Object.keys(TACTICS_DEFS);
   keys.forEach(key => {
-    const def = TACTICS_DEFS[key];
-    const optionKeys = Object.keys(def.options);
-    const baseVal = basePreset[key] || optionKeys[0];
+    const def       = TACTICS_DEFS[key];
+    const optKeys   = Object.keys(def.options);
+    const baseVal   = basePreset[key]  || optKeys[0];
+    const enemyVal  = enemyPreset?.[key];
 
-    if (quality < 0.3) {
-      // Low quality: mostly random
-      const randIdx = Math.floor(Math.random() * optionKeys.length);
-      team.tactics[key] = optionKeys[randIdx];
-    } else if (quality < 0.7) {
-      // Medium quality: base preset with some enemy awareness
-      team.tactics[key] = baseVal;
+    // If enemy preset has a different recommendation AND we're adapting to counter,
+    // use the enemy-counter value only when it differs from our base (true counter-pick).
+    if (applyCounterAdapt && enemyVal && enemyVal !== baseVal) {
+      // Prefer our own comp style but adopt enemy-counter for high-impact dimensions
+      // (combat strategy and objective setup are highest-impact — always counter those).
+      const highImpact = key === 'combatStrategy' || key === 'objectiveSetup';
+      team.tactics[key] = highImpact ? enemyVal : baseVal;
     } else {
-      // High quality: optimal for matchup
-      // Use enemy-aware override if available
-      const enemyVal = enemyPreset ? enemyPreset[key] : null;
-      if (enemyVal && Math.random() < quality) {
-        // Pick whichever is better for countering enemy
-        team.tactics[key] = enemyVal !== baseVal ? baseVal : enemyVal; // favor own comp
-      } else {
-        team.tactics[key] = baseVal;
-      }
+      team.tactics[key] = baseVal;
     }
   });
 }
@@ -511,7 +503,7 @@ STAFF_POOL.forEach(s => {
 
 const STAFF_ROLE_LABEL = {
   headcoach:  'Head Coach',
-  analyst:    'Analyst',
+  analyst:    'Assistant Coach',
   marketing:  'Marketing Manager',
   mental:     'Mental Coach',
   scout:      'Scout',

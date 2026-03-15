@@ -313,33 +313,10 @@ function _showBetweenGames() {
     <span class="bgp-sep">–</span>
     <span class="bgp-cpu">${cpuWins}  ${cpuName}</span>
   </div>
-  <div class="bgp-label">${fmt} Series · Game ${gameNum} next</div>`;
+  <div class="bgp-label">${fmt} Series · Game ${gameNum} next</div>
+  <div class="bgp-hint">Tactics are set in the pre-match phase before each game.</div>`;
 
-  // Full 9-dimension tactics for between-games
-  const curTactics = G.teams[G.humanTeamId].tactics;
-  const tacticRows = typeof TACTICS_DEFS !== 'undefined' ? Object.entries(TACTICS_DEFS).map(([key, def]) => {
-    const optBtns = Object.entries(def.options).map(([optKey, opt]) => {
-      const active = (curTactics[key] || '') === optKey;
-      return `<button class="bgp-tactic-btn ${active ? 'bgp-tactic-btn-active' : ''}" onclick="onBetweenGamesTacticDim('${key}','${optKey}')">${opt.label}</button>`;
-    }).join('');
-    return `<div class="bgp-tactic-row">
-      <div class="bgp-tactic-row-label">${def.label}</div>
-      <div class="bgp-tactic-row-opts">${optBtns}</div>
-    </div>`;
-  }).join('') : '';
-
-  const tacticsHtml = `<div class="bgp-tactics-wrap">
-    <div class="bgp-section-label">ADJUST TACTICS FOR GAME ${gameNum}</div>
-    <div class="bgp-tactics-dims">${tacticRows}</div>
-  </div>`;
-
-  document.getElementById('between-games-content').innerHTML = scoreHtml + tacticsHtml;
-}
-
-function onBetweenGamesTacticDim(key, value) {
-  if (!G || !_seriesState) return;
-  G.teams[G.humanTeamId].tactics[key] = value;
-  _showBetweenGames(); // re-render to update active
+  document.getElementById('between-games-content').innerHTML = scoreHtml;
 }
 
 function onNextGame() {
@@ -505,6 +482,10 @@ function startPBP(events) {
       _appendPBPEvent(ev, feedEl);
     }
     if (ev.agentStats && typeof updateLiveStats === 'function') updateLiveStats(ev.agentStats);
+    // Live gold chart: update progressively each tick
+    if (ev.tick !== undefined && _matchResult?.goldSnapshots) {
+      _drawGoldChart(_matchResult.goldSnapshots.slice(0, ev.tick + 1));
+    }
     _updateMatchScore(
       ev.blueKills,   ev.redKills,
       ev.blueShrines, ev.redShrines,

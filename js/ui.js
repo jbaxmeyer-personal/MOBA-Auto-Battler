@@ -1123,16 +1123,22 @@ function renderInteractiveDraft(availChamps) {
 
   // ── Pick board ─────────────────────────────────────────────────────────────
   // Picks are now strings (champion names), ordered by draft sequence (indices 0-4)
+  const _roleMap = { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support', arcanist:'Mid', vanguard:'Top', ranger:'Jungle', hunter:'ADC', warden:'Support' };
   const pickSlot = (pickArr, idx, side) => {
-    const pick = pickArr[idx];  // pick is a string (champion name) or undefined
+    const pick = pickArr[idx];
     const isCurrent = !done && seq && seq.type === 'pick' && seq.side === side
       && (side === 'blue' ? ds.bluePicks.length : ds.redPicks.length) === idx;
-    const champName = typeof pick === 'string' ? pick : pick?.champion;
-    const champClass = typeof pick === 'string' ? (CHAMPIONS[pick]?.class || '') : (pick?.champClass || '');
-    return `<div class="draft-pick ${isCurrent ? 'pick-current' : ''} ${!champName ? 'pick-empty' : ''}">
+    const champName  = typeof pick === 'string' ? pick : pick?.champion;
+    const cd         = champName ? (CHAMPIONS[champName] || {}) : null;
+    const champClass = cd?.class || '';
+    const champRoles = cd?.roles ? cd.roles.map(r => _roleMap[r] || r).join(' / ') : '';
+    const safe       = champName ? champName.replace(/'/g,"\\'") : '';
+    return `<div class="draft-pick ${isCurrent ? 'pick-current' : ''} ${!champName ? 'pick-empty' : ''}" ${champName ? `onclick="showDraftChampInfo('${safe}')" title="${_escHtml(champName)}"` : ''}>
       <span class="pick-pos">${idx + 1}</span>
-      <span class="pick-player">${champName ? _escHtml(champName) : '—'}</span>
-      ${champName ? `<span class="pick-champ">${classBadge(champClass)}</span>` : ''}
+      <div class="pick-info">
+        <span class="pick-player">${champName ? _escHtml(champName) : '—'}</span>
+        ${champName ? `<span class="pick-type-roles">${_escHtml(champClass)}${champRoles ? ' · '+_escHtml(champRoles) : ''}</span>` : ''}
+      </div>
     </div>`;
   };
 
@@ -1174,6 +1180,31 @@ function renderInteractiveDraft(availChamps) {
   }
 }
 
+// Build short description from ability effects
+function _effectsDesc(effects) {
+  if (!effects || !effects.length) return '';
+  return effects.map(ef => {
+    if (ef.type === 'cc')       return `${ef.ccType} ${ef.duration ? ef.duration+'s' : ''}`.trim();
+    if (ef.type === 'aoe')      return `area (r:${ef.radius})`;
+    if (ef.type === 'channel')  return `channel ${ef.ticks} ticks`;
+    if (ef.type === 'vamp')     return `heals ${Math.round(ef.pct*100)}%`;
+    if (ef.type === 'spellVamp')return `spell vamp ${Math.round(ef.pct*100)}%`;
+    if (ef.type === 'heal')     return 'heals caster';
+    if (ef.type === 'shield')   return 'grants shield';
+    if (ef.type === 'execute')  return 'execute bonus';
+    if (ef.type === 'bounce')   return `bounces ×${ef.count}`;
+    if (ef.type === 'trap')     return `places ${ef.count} traps`;
+    if (ef.type === 'pull')     return 'pulls target';
+    if (ef.type === 'invuln')   return `invulnerable ${ef.duration}s`;
+    if (ef.type === 'reflect')  return `reflects ${Math.round((ef.pct||0)*100)}% dmg`;
+    if (ef.type === 'globalProjectile') return 'global range';
+    if (ef.type === 'terrain')  return `terrain ${ef.duration}s`;
+    if (ef.type === 'mobilityCharge') return `${ef.charges} charges`;
+    if (ef.type === 'killReset')return 'reset on kill';
+    return ef.type;
+  }).join(', ');
+}
+
 function showDraftChampInfo(champName) {
   const el = document.getElementById('draft-champ-info');
   if (!el) return;
@@ -1186,17 +1217,18 @@ function showDraftChampInfo(champName) {
   const abilityHtml = (key, icon) => {
     const ab = cd.abilities?.[key];
     if (!ab || key === 'aa') return '';
-    const dmgStr = ab.dmg ? `${ab.dmg}${ab.apRatio ? ` (+${ab.apRatio} AP)` : ''}` : '';
-    const typeStr = ab.dmgType === 'magic' ? '✦' : '⚔';
-    const ccStr = ab.effects?.find(e => e.type === 'cc')?.ccType || '';
+    const isPhys  = ab.dmgType !== 'magic';
+    const dmgStr  = ab.dmg ? `${ab.dmg}${ab.apRatio ? ` (+${ab.apRatio} AP)` : ''}` : '';
+    const typeStr = isPhys ? '⚔' : '✦';
+    const efDesc  = _effectsDesc(ab.effects);
     return `<div class="dci-ability">
       <div class="dci-ability-header">
         <span class="dci-ability-icon">${icon}</span>
         <span class="dci-ability-name">${_escHtml(ab.name || key.toUpperCase())}</span>
         <span class="dci-ability-cd">cd: ${ab.cd}s</span>
         ${dmgStr ? `<span class="dci-ability-dmg">${typeStr} ${dmgStr}</span>` : ''}
-        ${ccStr ? `<span class="dci-ability-cc">${ccStr}</span>` : ''}
       </div>
+      ${efDesc ? `<div class="dci-ability-desc">${_escHtml(efDesc)}</div>` : ''}
     </div>`;
   };
 
@@ -1205,28 +1237,34 @@ function showDraftChampInfo(champName) {
   const compColor = cd.compType ? (COMP_COLORS[cd.compType] || '#888') : null;
   const roleCssMap = { Top:'pos-top', Jungle:'pos-jungle', Mid:'pos-mid', ADC:'pos-adc', Support:'pos-support' };
   const infoRolesRaw = cd.roles || (cd.role ? [cd.role] : []);
-  const infoRoleBadges = infoRolesRaw.map((r, i) => {
+  const infoRoleBadges = infoRolesRaw.map(r => {
     const d = roleMap[r] || r;
-    return `<span class="pos-badge ${roleCssMap[d]||''}">${d}${i>0?' (flex)':''}</span>`;
+    return `<span class="pos-badge ${roleCssMap[d]||''}">${d}</span>`;
   }).join('');
+
+  // Determine physical vs magic attack type
+  const aaType = cd.abilities?.aa?.dmgType || 'physical';
+  const physAtk = aaType !== 'magic' ? cd.baseDmg : 0;
+  const magicAtk = aaType === 'magic' ? cd.baseDmg : 0;
 
   el.innerHTML = `
     <div class="dci-wrap">
       <div class="dci-left">
         <div class="dci-header">
           <span class="dci-name">${_escHtml(champName)}</span>
-          ${b ? `<span class="class-badge" style="color:${b.color};border-color:${b.color}">${b.label}</span>` : ''}
+          ${cd.class ? `<span class="dci-fullclass" style="color:${b ? b.color : '#888'}">${cd.class}</span>` : ''}
           ${compColor ? `<span class="dci-comp" style="color:${compColor};border-color:${compColor}">${cd.compType}</span>` : ''}
-          ${infoRoleBadges}
         </div>
+        <div class="dci-roles-row">${infoRoleBadges}</div>
         ${cd.lore ? `<div class="dci-lore">${_escHtml(cd.lore)}</div>` : ''}
         <div class="dci-stats">
-          ${stat('HP',        cd.baseHp)}
-          ${stat('ATK',       cd.baseDmg)}
-          ${stat('Range',     cd.attackRange)}
-          ${stat('Move Spd',  cd.moveSpeed)}
-          ${stat('Armor',     cd.physResist)}
-          ${stat('Mag.Res',   cd.magicResist)}
+          ${stat('HP',          cd.baseHp)}
+          ${physAtk ? stat('Physical Atk', physAtk) : ''}
+          ${magicAtk ? stat('Magic Atk',   magicAtk) : ''}
+          ${stat('Range',       cd.attackRange)}
+          ${stat('Move Spd',    cd.moveSpeed)}
+          ${stat('Armor',       cd.physResist)}
+          ${stat('Magic Res',   cd.magicResist)}
         </div>
       </div>
       <div class="dci-right">
@@ -1250,11 +1288,15 @@ function renderRoleAssignment(picks) {
     <div class="ra-bench-label">Your Picks — click a champion, then click a role</div>
     <div class="ra-bench-cards">
       ${bench.map(c => {
-        const cd = CHAMPIONS[c] || {};
+        const cd  = CHAMPIONS[c] || {};
         const sel = ds.raSelectedChamp === c;
+        const b   = CLASS_BADGE[(cd.class || '').toLowerCase()];
+        const roleMap2 = { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support', arcanist:'Mid', vanguard:'Top', ranger:'Jungle', hunter:'ADC', warden:'Support' };
+        const rolesStr = (cd.roles || []).map(r => roleMap2[r] || r).join(' / ');
         return `<div class="ra-champ-card ${sel ? 'ra-selected' : ''}" onclick="raSelectChamp('${c.replace(/'/g,"\\'")}')">
           <div class="ra-champ-name">${_escHtml(c)}</div>
-          ${classBadge(cd.class)}
+          ${cd.class ? `<div class="ra-champ-type" style="color:${b ? b.color : '#888'}">${cd.class}</div>` : ''}
+          ${rolesStr ? `<div class="ra-champ-roles">${_escHtml(rolesStr)}</div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -1263,11 +1305,16 @@ function renderRoleAssignment(picks) {
     const champ = assigned[pos];
     const cd = champ ? (CHAMPIONS[champ] || {}) : null;
     const filled = !!champ;
+    const raB = cd ? CLASS_BADGE[(cd.class || '').toLowerCase()] : null;
+    const raRoleMap = { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support', arcanist:'Mid', vanguard:'Top', ranger:'Jungle', hunter:'ADC', warden:'Support' };
+    const raRoles = cd ? (cd.roles || []).map(r => raRoleMap[r] || r).join(' / ') : '';
     return `<div class="ra-slot ${filled ? 'ra-slot-filled' : 'ra-slot-empty'}" onclick="raAssignToSlot('${pos}')">
       <span class="ra-slot-icon">${posIcon(pos)}</span>
       <span class="ra-slot-label">${posLabel(pos)}</span>
       ${filled
-        ? `<span class="ra-slot-champ">${_escHtml(champ)}</span>${classBadge(cd.class)}<span class="ra-unassign" onclick="event.stopPropagation();raAssignToSlot('${pos}')">✕</span>`
+        ? `<span class="ra-slot-champ">${_escHtml(champ)}</span>
+           ${cd.class ? `<span class="ra-slot-type" style="color:${raB ? raB.color : '#888'}">${cd.class}${raRoles ? ' · '+raRoles : ''}</span>` : ''}
+           <span class="ra-unassign" onclick="event.stopPropagation();raAssignToSlot('${pos}')">✕</span>`
         : `<span class="ra-slot-hint">— assign —</span>`}
     </div>`;
   }).join('');
@@ -1572,7 +1619,7 @@ function renderTacticsPhase() {
     const analyst = (G.staff || []).find(s => s.role === 'analyst');
     const oppScout = analyst ? (analyst.attrs?.opponentScouting ?? analyst.stat ?? 10) : 0;
     const analystHint = analyst && oppScout >= 12
-      ? `<div class="tp-analyst-hint">🔍 ${analyst.name}: ${_generateAnalystHint(oppScout, draft, yourSide)}</div>`
+      ? `<div class="tp-analyst-hint">🔍 Asst. Coach ${analyst.name}: ${_generateAnalystHint(oppScout, draft, yourSide)}</div>`
       : '';
 
     matchupHtml = `<div class="tp-matchup-panel">

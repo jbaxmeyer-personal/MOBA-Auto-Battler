@@ -294,7 +294,7 @@
     </div>
     <div class="tp-desc-bar" id="tp-desc-bar">Hover a tactic option to see its description.</div>
     <div class="tp-actions">
-      <button class="btn-secondary" onclick="onDelegateToAnalyst()">🎓 Delegate to Analyst</button>
+      <button class="btn-secondary" onclick="onDelegateToAnalyst()">🎓 Delegate to Assistant Coach</button>
       <button class="btn-primary" onclick="onConfirmTactics()">Start Match ▶</button>
       <button class="btn-text" onclick="onSkipTactics()">Skip Tactics</button>
     </div>
@@ -373,82 +373,94 @@
           <circle cx="265" cy="35" r="7"  fill="#ff7b7b" opacity="0.35"/>
           <text x="265" y="39" text-anchor="middle" font-size="5" fill="#ff7b7b" font-weight="bold" letter-spacing="0.5">NEXUS</text>
 
-          <!-- ── Blue turrets (defend along bot lane and base) ──────────────── -->
-          <!-- Blue outer bot turret -->
+          <!-- ── Blue towers ──────────────────────────────────────────────────── -->
+          <!-- Blue bot outer (190,265) -->
           <g id="obj-b_outer">
             <rect x="183" y="258" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="1.5"/>
             <line x1="190" y1="252" x2="190" y2="258" stroke="#4fc3f7" stroke-width="1.5"/>
             <rect x="187" y="248" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.7"/>
             <rect x="183" y="270" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_outer" data-maxw="14"/>
           </g>
-          <!-- Blue inner bot turret -->
+          <!-- Blue bot inner (105,265) -->
           <g id="obj-b_inner">
             <rect x="98" y="258" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="1.5"/>
             <line x1="105" y1="252" x2="105" y2="258" stroke="#4fc3f7" stroke-width="1.5"/>
             <rect x="102" y="248" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.7"/>
             <rect x="98" y="270" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_inner" data-maxw="14"/>
           </g>
-          <!-- Blue top outer turret -->
+          <!-- Blue mid tower (90,210) -->
+          <g id="obj-b_mid">
+            <rect x="83" y="203" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="1.5"/>
+            <line x1="90" y1="197" x2="90" y2="203" stroke="#4fc3f7" stroke-width="1.5"/>
+            <rect x="87" y="193" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.7"/>
+            <rect x="83" y="215" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_mid" data-maxw="14"/>
+          </g>
+          <!-- Blue top tower (35,120) -->
+          <g id="obj-b_top">
+            <rect x="28" y="113" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="1.5"/>
+            <line x1="35" y1="107" x2="35" y2="113" stroke="#4fc3f7" stroke-width="1.5"/>
+            <rect x="32" y="103" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.7"/>
+            <rect x="28" y="125" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_top" data-maxw="14"/>
+          </g>
+          <!-- Blue base tower (40,68) -->
           <g id="obj-b_heart">
-            <rect x="28" y="95" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="1.5"/>
-            <line x1="35" y1="89" x2="35" y2="95" stroke="#4fc3f7" stroke-width="1.5"/>
-            <rect x="32" y="85" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.7"/>
-            <rect x="28" y="107" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_heart" data-maxw="14"/>
+            <rect x="33" y="61" width="14" height="14" rx="2" fill="#0a2040" stroke="#4fc3f7" stroke-width="2"/>
+            <line x1="40" y1="55" x2="40" y2="61" stroke="#4fc3f7" stroke-width="1.5"/>
+            <rect x="37" y="51" width="6" height="5" rx="1" fill="#4fc3f7" opacity="0.9"/>
+            <rect x="33" y="73" width="14" height="3" rx="1" fill="#152a10" id="obj-hp-b_heart" data-maxw="14"/>
           </g>
 
-          <!-- ── Red turrets ──────────────────────────────────────────────── -->
-          <!-- Red outer top turret -->
+          <!-- ── Red towers ──────────────────────────────────────────────────── -->
+          <!-- Red top outer (110,35) -->
           <g id="obj-r_outer">
-            <rect x="258" y="108" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
-            <line x1="265" y1="102" x2="265" y2="108" stroke="#ff7b7b" stroke-width="1.5"/>
-            <rect x="262" y="98" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
-            <rect x="258" y="120" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_outer" data-maxw="14"/>
-          </g>
-          <!-- Red inner top turret -->
-          <g id="obj-r_inner">
             <rect x="103" y="28" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
             <line x1="110" y1="22" x2="110" y2="28" stroke="#ff7b7b" stroke-width="1.5"/>
             <rect x="107" y="18" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
-            <rect x="103" y="40" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_inner" data-maxw="14"/>
+            <rect x="103" y="40" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_outer" data-maxw="14"/>
           </g>
-          <!-- Red bot outer turret -->
+          <!-- Red top inner (265,110) -->
+          <g id="obj-r_inner">
+            <rect x="258" y="103" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
+            <line x1="265" y1="97" x2="265" y2="103" stroke="#ff7b7b" stroke-width="1.5"/>
+            <rect x="262" y="93" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
+            <rect x="258" y="115" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_inner" data-maxw="14"/>
+          </g>
+          <!-- Red mid tower (210,90) -->
+          <g id="obj-r_mid">
+            <rect x="203" y="83" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
+            <line x1="210" y1="77" x2="210" y2="83" stroke="#ff7b7b" stroke-width="1.5"/>
+            <rect x="207" y="73" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
+            <rect x="203" y="95" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_mid" data-maxw="14"/>
+          </g>
+          <!-- Red bot tower (265,180) -->
+          <g id="obj-r_bot">
+            <rect x="258" y="173" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
+            <line x1="265" y1="167" x2="265" y2="173" stroke="#ff7b7b" stroke-width="1.5"/>
+            <rect x="262" y="163" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
+            <rect x="258" y="185" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_bot" data-maxw="14"/>
+          </g>
+          <!-- Red base tower (260,232) -->
           <g id="obj-r_heart">
-            <rect x="258" y="183" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="1.5"/>
-            <line x1="265" y1="177" x2="265" y2="183" stroke="#ff7b7b" stroke-width="1.5"/>
-            <rect x="262" y="173" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.7"/>
-            <rect x="258" y="195" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_heart" data-maxw="14"/>
+            <rect x="253" y="225" width="14" height="14" rx="2" fill="#200a0a" stroke="#ff7b7b" stroke-width="2"/>
+            <line x1="260" y1="219" x2="260" y2="225" stroke="#ff7b7b" stroke-width="1.5"/>
+            <rect x="257" y="215" width="6" height="5" rx="1" fill="#ff7b7b" opacity="0.9"/>
+            <rect x="253" y="237" width="14" height="3" rx="1" fill="#2a1010" id="obj-hp-r_heart" data-maxw="14"/>
           </g>
 
-          <!-- ── Shrine A — Dragon (blue jungle, top-left area) ─────────────── -->
-          <g id="obj-shrine_a">
-            <circle cx="88" cy="108" r="11" fill="#1a1400" stroke="#c89b3c" stroke-width="2"/>
-            <polygon points="88,100 95,113 81,113" fill="none" stroke="#c89b3c" stroke-width="1.2" opacity="0.8"/>
-            <text x="88" y="128" text-anchor="middle" font-size="5" fill="#c89b3c">SHRINE</text>
-            <rect x="78" y="121" width="20" height="3" rx="1" fill="#1a1200" id="obj-hp-shrine_a" data-maxw="20"/>
+          <!-- ── Ley Shrine (map center 150,150) ─────────────────────────────── -->
+          <g id="obj-shrine">
+            <circle cx="150" cy="150" r="12" fill="#1a1400" stroke="#c89b3c" stroke-width="2"/>
+            <polygon points="150,141 158,155 142,155" fill="none" stroke="#c89b3c" stroke-width="1.2" opacity="0.8"/>
+            <text x="150" y="170" text-anchor="middle" font-size="5" fill="#c89b3c">SHRINE</text>
+            <rect x="140" y="163" width="20" height="3" rx="1" fill="#1a1200" id="obj-hp-shrine" data-maxw="20"/>
           </g>
 
-          <!-- ── Shrine B — Dragon (red jungle, bottom-right area) ──────────── -->
-          <g id="obj-shrine_b">
-            <circle cx="212" cy="192" r="11" fill="#1a1400" stroke="#c89b3c" stroke-width="2"/>
-            <polygon points="212,184 219,197 205,197" fill="none" stroke="#c89b3c" stroke-width="1.2" opacity="0.8"/>
-            <text x="212" y="212" text-anchor="middle" font-size="5" fill="#c89b3c">SHRINE</text>
-            <rect x="202" y="205" width="20" height="3" rx="1" fill="#1a1200" id="obj-hp-shrine_b" data-maxw="20"/>
-          </g>
-
-          <!-- ── Warden B (map center, slightly blue side) ──────────────────── -->
-          <g id="obj-warden_b">
-            <circle cx="138" cy="148" r="10" fill="#120a1a" stroke="#9b59b6" stroke-width="2"/>
-            <text x="138" y="152" text-anchor="middle" font-size="6" fill="#9b59b6" font-weight="bold">W</text>
-            <text x="138" y="165" text-anchor="middle" font-size="4.5" fill="#9b59b6">WARDEN</text>
-            <rect x="128" y="159" width="20" height="3" rx="1" fill="#0a0a12" id="obj-hp-warden_b" data-maxw="20"/>
-          </g>
-
-          <!-- ── Warden R (map center, slightly red side) ───────────────────── -->
-          <g id="obj-warden_r">
-            <circle cx="162" cy="152" r="10" fill="#120a1a" stroke="#9b59b6" stroke-width="2"/>
-            <text x="162" y="156" text-anchor="middle" font-size="6" fill="#9b59b6" font-weight="bold">W</text>
-            <text x="162" y="169" text-anchor="middle" font-size="4.5" fill="#9b59b6">WARDEN</text>
-            <rect x="152" y="163" width="20" height="3" rx="1" fill="#0a0a12" id="obj-hp-warden_r" data-maxw="20"/>
+          <!-- ── Grove Warden (150,125) ─────────────────────────────────────── -->
+          <g id="obj-warden">
+            <circle cx="150" cy="125" r="11" fill="#120a1a" stroke="#9b59b6" stroke-width="2"/>
+            <text x="150" y="129" text-anchor="middle" font-size="6" fill="#9b59b6" font-weight="bold">W</text>
+            <text x="150" y="143" text-anchor="middle" font-size="4.5" fill="#9b59b6">WARDEN</text>
+            <rect x="140" y="137" width="20" height="3" rx="1" fill="#0a0a12" id="obj-hp-warden" data-maxw="20"/>
           </g>
 
           <!-- ── Event ring ─────────────────────────────────────────────────── -->

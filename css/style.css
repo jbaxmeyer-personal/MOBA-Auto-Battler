@@ -393,11 +393,12 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .pbp-visible { opacity: 1 !important; transform: none !important; }
 .pbp-time {
   font-size: 11px;
-  color: var(--text-dim);
+  color: #7aaa7a;
   min-width: 40px;
   flex-shrink: 0;
   padding-top: 2px;
   font-family: monospace;
+  font-weight: 600;
 }
 .pbp-text { flex: 1; }
 .pbp-kill        { border-right-color: #e74c3c; background: rgba(231,76,60,0.06); }
@@ -1196,6 +1197,16 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
   font-size: 10px; color: #aaaaaa;
 }
 .dci-passive-text { line-height: 1.4; }
+.dci-ability-desc { font-size: 10px; color: #8aaa8a; margin-top: 3px; font-style: italic; }
+.dci-fullclass { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
+.dci-roles-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 5px; }
+/* pick slot info */
+.pick-info { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.pick-type-roles { font-size: 9px; color: #6a8a6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* role assignment bench cards */
+.ra-champ-type  { font-size: 10px; font-weight: 700; text-align: center; margin-top: 1px; }
+.ra-champ-roles { font-size: 9px; color: #6a8a6a; text-align: center; }
+.ra-slot-type   { font-size: 9px; color: #6a8a6a; margin-left: 4px; }
 
 /* ── Between Games Panel ─────────────────────────────────────────────────────── */
 .between-games-panel {
@@ -1210,7 +1221,8 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .bgp-you   { font-size: 36px; font-weight: 900; color: var(--gold); }
 .bgp-cpu   { font-size: 36px; font-weight: 900; color: var(--text-dim); }
 .bgp-sep   { font-size: 28px; color: var(--border); }
-.bgp-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 24px; }
+.bgp-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.bgp-hint  { font-size: 11px; color: #556655; margin-bottom: 24px; }
 .bgp-section-label {
   font-size: 11px; font-weight: 700; color: var(--text-dim);
   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; text-align: left;
