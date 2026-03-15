@@ -434,6 +434,7 @@ function initGame(humanTeamId) {
     trainingLog:    [],        // [{ week, teamId, choice }]
     financeLog:     [],        // [{ week, wages, income, net, balance }]
     fanMilestones:  { m100k: false, m250k: false, m500k: false, m1m: false, m2m: false },
+    coStreamDeals:  { available: [], active: [] },
     scouting:       { weeklyBudget: 50000, activeScout: null, reports: [], discovered: [] },
     staff:          [],   // array of hired staff objects { ...STAFF_POOL entry, hiredWeek }
     manager:        { xp: 0, lastLevel: 1, traits: [] },
@@ -579,8 +580,8 @@ function advanceWeek() {
   // Process training for human team
   processTraining(G.humanTeamId, G.weeklyTraining || 'rest');
 
-  // Process standalone streaming for human team
-  processStreaming(G.humanTeamId);
+  // Process fan engagement (FES, streaming, deals, events) for human team
+  processFanEngagement(G.humanTeamId);
 
   // Process scouting
   if (G.scouting && G.scouting.activeScout) {
@@ -638,10 +639,16 @@ function advanceWeek() {
 function _applyFanChange(teamId, won) {
   const t = G.teams[teamId];
   if (!t) return;
-  const pct = won
-    ? 0.02 + Math.random() * 0.02   // +2–4%
-    : -(0.005 + Math.random() * 0.005); // −0.5–1%
-  t.fans = Math.round(t.fans * (1 + pct));
+  // For AI teams: direct fan change
+  if (teamId !== G.humanTeamId) {
+    const pct = won
+      ? 0.02 + Math.random() * 0.02
+      : -(0.005 + Math.random() * 0.005);
+    t.fans = Math.round(t.fans * (1 + pct));
+    return;
+  }
+  // For human team: store as FES bonus consumed in processFanEngagement
+  t._fesMatchBonus = (t._fesMatchBonus || 0) + (won ? 0.5 : -0.3);
 }
 
 // ─── Personality multiplier ───────────────────────────────────────────────────
@@ -824,25 +831,195 @@ function getStaffWages() {
   return G.staff.reduce((sum, s) => sum + s.wage, 0);
 }
 
-// ─── Streaming ────────────────────────────────────────────────────────────────
+// ─── Fan Engagement System ────────────────────────────────────────────────────
 
-function processStreaming(teamId) {
+const CO_STREAM_DEAL_POOL = [
+  { id: 'deal_arenacast',  partner: 'ArenaCast Network',  fesPerWeek: 0.6, costPerWeek: 0,      durationWeeks: 6 },
+  { id: 'deal_grovetv',    partner: 'GroveTV',            fesPerWeek: 0.8, costPerWeek: 5000,   durationWeeks: 4 },
+  { id: 'deal_clutchcast', partner: 'ClutchCast',         fesPerWeek: 0.4, costPerWeek: 0,      durationWeeks: 8 },
+  { id: 'deal_esportz',    partner: 'Esportz Live',       fesPerWeek: 1.0, costPerWeek: 10000,  durationWeeks: 3 },
+  { id: 'deal_novamedia',  partner: 'Nova Media',         fesPerWeek: 0.5, costPerWeek: 0,      durationWeeks: 5 },
+  { id: 'deal_limelight',  partner: 'Limelight Studios',  fesPerWeek: 0.7, costPerWeek: 7500,   durationWeeks: 4 },
+  { id: 'deal_wildstream', partner: 'WildStream',         fesPerWeek: 0.3, costPerWeek: 0,      durationWeeks: 10 },
+  { id: 'deal_primetime',  partner: 'PrimeTime Gaming',   fesPerWeek: 1.2, costPerWeek: 15000,  durationWeeks: 3 },
+];
+
+const FAN_EVENT_DEFS = {
+  meetGreet:  { label: 'Fan Meet & Greet',  cost: 35000,  fesBonus: 1.5, cooldownWeeks: 3,  trainingBlock: 0 },
+  arenaEvent: { label: 'Arena Fan Event',   cost: 100000, fesBonus: 2.5, cooldownWeeks: 6,  trainingBlock: 1 },
+  roadShow:   { label: 'Road Show',         cost: 300000, fesBonus: 3.0, cooldownWeeks: 8,  trainingBlock: 2 },
+};
+
+function _initFanState(team) {
+  if (!team.fanHistory)   team.fanHistory   = [];
+  if (!team.fesHistory)   team.fesHistory   = [];
+  if (!team.fes)          team.fes          = 5;
+  if (!team.fesLowStreak) team.fesLowStreak = 0;
+  if (!team.fanEvents)    team.fanEvents    = { meetGreet: 0, arenaEvent: 0, roadShow: 0 }; // lastWeek
+  if (!team.fanEventWeek) team.fanEventWeek = null; // event triggered this week bonus
+}
+
+function _initCoStreamDeals() {
+  if (!G.coStreamDeals) G.coStreamDeals = { available: [], active: [] };
+  // Regenerate available deals if pool is empty
+  if (G.coStreamDeals.available.length === 0) {
+    const activeIds = G.coStreamDeals.active.map(d => d.id);
+    const pool = CO_STREAM_DEAL_POOL.filter(d => !activeIds.includes(d.id));
+    // Offer 2-3 random deals
+    const count = Math.min(3, pool.length);
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    G.coStreamDeals.available = shuffled.slice(0, count).map(d => ({ ...d, expiresWeek: G.season.week + 4 }));
+  }
+}
+
+function acceptCoStreamDeal(dealId) {
+  if (!G.coStreamDeals) return false;
+  const idx = G.coStreamDeals.available.findIndex(d => d.id === dealId);
+  if (idx === -1) return false;
+  const deal = G.coStreamDeals.available.splice(idx, 1)[0];
+  G.coStreamDeals.active.push({ ...deal, weeksRemaining: deal.durationWeeks });
+  addNews(`Co-streaming deal signed: ${deal.partner} — +${deal.fesPerWeek} FES/wk for ${deal.durationWeeks} weeks.`, 'info');
+  return true;
+}
+
+function cancelCoStreamDeal(dealId) {
+  if (!G.coStreamDeals) return;
+  G.coStreamDeals.active = G.coStreamDeals.active.filter(d => d.id !== dealId);
+}
+
+function hostFanEvent(eventKey) {
+  const def = FAN_EVENT_DEFS[eventKey];
+  if (!def) return { ok: false, msg: 'Unknown event type' };
+  const team = G.teams[G.humanTeamId];
+  _initFanState(team);
+  const week = G.season.week;
+  const lastWeek = team.fanEvents[eventKey] || 0;
+  if (week - lastWeek < def.cooldownWeeks) {
+    const remaining = def.cooldownWeeks - (week - lastWeek);
+    return { ok: false, msg: `On cooldown for ${remaining} more week(s)` };
+  }
+  if (team.budget < def.cost) {
+    return { ok: false, msg: 'Insufficient budget' };
+  }
+  team.budget -= def.cost;
+  team.fanEvents[eventKey] = week;
+  team.fanEventWeek = { key: eventKey, bonus: def.fesBonus, week };
+  if (def.trainingBlock > 0) {
+    G.weeklyTraining = 'rest'; // override training — team is busy with event
+    addNews(`${def.label} scheduled this week — training replaced with recovery.`, 'info');
+  }
+  addNews(`${def.label} hosted! Fan engagement boost incoming. Cost: ${fmtMoneySafe(def.cost)}.`, 'info');
+  return { ok: true };
+}
+
+function calcFES(teamId) {
   const team = G.teams[teamId];
-  if (!team) return;
-  let totalFanGainPct = 0;
+  if (!team) return 5;
+  _initFanState(team);
+  let fes = -0.5; // base negative (must work to keep fans)
+
+  // Streaming contributions
   POSITIONS.forEach(pos => {
     const p = team.roster[pos] ? G.players[team.roster[pos]] : null;
     if (!p || !p.streaming?.active) return;
     const schedule = p.streaming.schedule || 'casual';
-    // Fan gain per active streamer
-    const basePct   = schedule === 'heavy' ? 0.010 : 0.003;
-    // Morale penalty from heavy schedule
+    fes += schedule === 'heavy' ? 0.8 : 0.3;
+    // Morale effect of streaming
     const condition = schedule === 'heavy' ? -0.6 : -0.1;
-    p.morale = Math.max(1, p.morale + condition + 0.5); // +0.5 enjoyment offset
-    totalFanGainPct += basePct;
+    p.morale = Math.max(1, p.morale + condition + 0.5);
   });
-  if (totalFanGainPct > 0) {
-    team.fans = Math.round(team.fans * (1 + totalFanGainPct));
+
+  // Marketing staff contribution
+  const marketing = (G.staff || []).find(s => s.role === 'marketing');
+  if (marketing) {
+    const contProd = marketing.attrs?.contentProduction ?? marketing.stat ?? 10;
+    fes += (contProd / 20) * 2.0; // 0–2.0 range based on stat
+  }
+
+  // Active co-streaming deals
+  if (G.coStreamDeals) {
+    G.coStreamDeals.active.forEach(d => { fes += d.fesPerWeek; });
+  }
+
+  // Fan event this week
+  if (team.fanEventWeek && team.fanEventWeek.week === G.season.week) {
+    fes += team.fanEventWeek.bonus;
+  }
+
+  // Match result bonus (applied separately in advanceWeek via _applyMatchFESBonus)
+  const matchBonus = team._fesMatchBonus || 0;
+  fes += matchBonus;
+  team._fesMatchBonus = 0; // consume
+
+  return Math.max(0, Math.min(10, Math.round(fes * 10) / 10));
+}
+
+function processFanEngagement(teamId) {
+  const team = G.teams[teamId];
+  if (!team) return;
+  _initFanState(team);
+  _initCoStreamDeals();
+
+  // Compute FES
+  const fes = calcFES(teamId);
+  team.fes = fes;
+
+  // Track history (keep 8 weeks)
+  team.fanHistory.push(team.fans);
+  team.fesHistory.push(fes);
+  if (team.fanHistory.length > 8) team.fanHistory.shift();
+  if (team.fesHistory.length > 8) team.fesHistory.shift();
+
+  // Fan change based on FES
+  let pct;
+  if      (fes >= 8) pct = 0.03 + Math.random() * 0.03;
+  else if (fes >= 5) pct = 0.005 + Math.random() * 0.015;
+  else if (fes >= 3) pct = -(0.002 + Math.random() * 0.003);
+  else               pct = -(0.01  + Math.random() * 0.02);
+
+  team.fans = Math.max(1000, Math.round(team.fans * (1 + pct)));
+
+  // Crisis alert tracking
+  if (fes < 2) {
+    team.fesLowStreak = (team.fesLowStreak || 0) + 1;
+    if (team.fesLowStreak >= 3) {
+      addNews('Fan engagement crisis: Your audience is disengaged. Stream more, host events, or hire a Marketing Manager.', 'alert');
+      team.fesLowStreak = 0; // reset so it doesn't spam every week
+    }
+  } else {
+    team.fesLowStreak = 0;
+  }
+
+  // Advance active co-streaming deals
+  if (G.coStreamDeals) {
+    G.coStreamDeals.active = G.coStreamDeals.active.filter(d => {
+      d.weeksRemaining--;
+      if (d.weeksRemaining <= 0) {
+        addNews(`Co-streaming deal with ${d.partner} has ended.`, 'info');
+        return false;
+      }
+      // Deduct weekly cost
+      if (d.costPerWeek > 0) team.budget -= d.costPerWeek;
+      return true;
+    });
+
+    // Expire available deals that weren't accepted
+    G.coStreamDeals.available = G.coStreamDeals.available.filter(d => d.expiresWeek > G.season.week);
+
+    // Occasionally refresh available deals (every 3 weeks or when empty)
+    if (G.coStreamDeals.available.length === 0 || G.season.week % 3 === 0) {
+      const activeIds = G.coStreamDeals.active.map(d => d.id);
+      const usedIds   = [...activeIds];
+      const pool = CO_STREAM_DEAL_POOL.filter(d => !usedIds.includes(d.id));
+      if (pool.length > 0) {
+        const count = Math.min(2, pool.length);
+        const shuffled = pool.sort(() => Math.random() - 0.5);
+        const newDeals = shuffled.slice(0, count).map(d => ({ ...d, expiresWeek: G.season.week + 4 }));
+        // Only add deals not already available
+        const existIds = G.coStreamDeals.available.map(d => d.id);
+        newDeals.forEach(d => { if (!existIds.includes(d.id)) G.coStreamDeals.available.push(d); });
+      }
+    }
   }
 }
 

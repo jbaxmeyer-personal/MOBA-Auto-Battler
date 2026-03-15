@@ -1702,3 +1702,88 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
   padding: 2px 4px;
   cursor: pointer;
 }
+
+/* ─── Fans Panel ─────────────────────────────────────────── */
+.fans-layout { display: flex; flex-direction: column; gap: 18px; }
+
+.fans-overview-card {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.fans-overview-top {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.fans-count-block { min-width: 120px; }
+.fans-count-num { font-size: 28px; font-weight: 700; color: var(--text-hi); line-height: 1; }
+.fans-count-label { font-size: 11px; color: var(--text-dim); margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.fans-fes-block { display: flex; flex-direction: column; align-items: center; }
+.fes-gauge-wrap { position: relative; width: 100px; height: 60px; }
+.fes-gauge-val { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 700; }
+
+.fans-spark-block { display: flex; flex-direction: column; align-items: center; }
+
+.fes-breakdown { display: flex; flex-direction: column; gap: 4px; }
+.fes-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.fes-label { flex: 1; color: var(--text-dim); }
+.fes-val { font-weight: 700; min-width: 40px; text-align: right; }
+
+.fans-section {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.fans-section-title { font-size: 14px; font-weight: 700; color: var(--text-hi); margin-bottom: 10px; letter-spacing: 0.3px; }
+
+.fans-mkt-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; margin-bottom: 4px; }
+.mkt-stat-bar-bg { flex: 1; min-width: 60px; height: 6px; background: var(--border2); border-radius: 3px; }
+.mkt-stat-bar-fill { height: 100%; border-radius: 3px; background: var(--gold); }
+
+.fans-player-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fans-player-table th { text-align: left; padding: 6px 8px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.fans-player-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+
+.deals-group-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.deals-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.deal-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.deal-card.deal-active { border-color: rgba(76,175,80,0.4); }
+.deal-name { font-weight: 700; color: var(--text-hi); font-size: 13px; }
+.deal-stats { display: flex; gap: 10px; font-size: 12px; flex-wrap: wrap; }
+
+.events-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.event-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.event-name { font-weight: 700; color: var(--text-hi); font-size: 13px; }
+.event-stats { display: flex; gap: 10px; font-size: 12px; flex-wrap: wrap; }
+
+.btn-sm { font-size: 11px; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border2); background: var(--panel2); color: var(--text); cursor: pointer; }
+.btn-sm:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-danger { border-color: rgba(244,67,54,0.5); color: var(--loss); }
+.btn-danger:hover:not(:disabled) { background: rgba(244,67,54,0.2); border-color: var(--loss); color: var(--loss); }

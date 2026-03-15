@@ -104,6 +104,7 @@ function showMain(name) {
     case 'news':       renderNews(); break;
     case 'staff':        renderStaff(); break;
     case 'facilities':   renderFacilities(); break;
+    case 'fans':         renderFans(); break;
     case 'teaminfo':     renderTeamInfo(); break;
     case 'champions':    renderChampionBrowser(); break;
     case 'statistics':   renderStatistics(_statsTab); break;
@@ -265,20 +266,6 @@ function renderSquad(tab = 'starters') {
         </td>
         <td style="color:var(--text-dim);font-size:11px">${p.contract.yearsLeft}yr</td>
         <td>${personalityBadge(p.personality || 'pro')}</td>
-        <td onclick="event.stopPropagation()">
-          <div class="stream-toggle-wrap">
-            <label class="stream-toggle" title="${p.streaming?.active ? 'Streaming ON' : 'Streaming OFF'}">
-              <input type="checkbox" ${p.streaming?.active ? 'checked' : ''}
-                onchange="setPlayerStreaming('${p.id}', this.checked)">
-              <span class="stream-slider"></span>
-            </label>
-            ${p.streaming?.active ? `<select class="stream-sched-select"
-              onchange="setPlayerStreamSchedule('${p.id}', this.value)">
-              <option value="casual" ${(p.streaming?.schedule||'casual')==='casual'?'selected':''}>Casual</option>
-              <option value="heavy"  ${(p.streaming?.schedule||'casual')==='heavy' ?'selected':''}>Heavy</option>
-            </select>` : ''}
-          </div>
-        </td>
       </tr>`;
   }).join('');
 
@@ -293,7 +280,7 @@ function renderSquad(tab = 'starters') {
     <table class="squad-table">
       <thead><tr>
         <th>Pos</th><th>Name</th><th>OVR</th><th>Age</th>
-        <th>Nat</th><th>Salary</th><th>Morale</th><th>Contract</th><th>Personality</th><th>Stream</th>
+        <th>Nat</th><th>Salary</th><th>Morale</th><th>Contract</th><th>Personality</th>
       </tr></thead>
       <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px">No players</td></tr>'}</tbody>
     </table>
@@ -1704,6 +1691,235 @@ function setPlayerStreamSchedule(playerId, schedule) {
   if (!p) return;
   if (!p.streaming) p.streaming = { active: true, schedule: 'casual' };
   p.streaming.schedule = schedule;
+}
+
+// ─── Fan Engagement ───────────────────────────────────────────────────────────
+
+function _fesColor(fes) {
+  if (fes >= 7) return '#4caf50';
+  if (fes >= 4) return '#c89b3c';
+  return '#f44336';
+}
+
+function renderFans() {
+  if (!G) return;
+  const team = G.teams[G.humanTeamId];
+  const fans = team.fans || 0;
+  const fes  = team.fes ?? 5;
+  const fesColor = _fesColor(fes);
+
+  // Fan history sparkline
+  const hist = team.fanHistory || [];
+  const sparkMax = Math.max(...hist, fans, 1);
+  const sparkMin = Math.min(...hist, fans, 0);
+  const sparkRange = sparkMax - sparkMin || 1;
+  const sparkPoints = [...hist, fans].map((v, i, arr) => {
+    const x = (i / Math.max(arr.length - 1, 1)) * 180;
+    const y = 30 - ((v - sparkMin) / sparkRange) * 28;
+    return `${x},${y}`;
+  }).join(' ');
+
+  // Week fan trend
+  const prevFans = hist.length >= 1 ? hist[hist.length - 1] : fans;
+  const fanDelta = fans - prevFans;
+  const fanDeltaStr = fanDelta >= 0 ? `+${fmtFans(fanDelta)}` : fmtFans(fanDelta);
+  const fanDeltaColor = fanDelta >= 0 ? '#4caf50' : '#f44336';
+
+  // FES breakdown contributors
+  const marketing = (G.staff || []).find(s => s.role === 'marketing');
+  const contProd = marketing ? (marketing.attrs?.contentProduction ?? marketing.stat ?? 10) : 0;
+  const mktContrib = marketing ? Math.round((contProd / 20) * 20) / 10 : 0;
+
+  const streamers = Object.values(team.roster || {})
+    .map(id => G.players[id])
+    .filter(p => p && p.streaming?.active);
+  const streamContrib = streamers.reduce((s, p) => s + (p.streaming.schedule === 'heavy' ? 0.8 : 0.3), 0);
+
+  const dealContrib = (G.coStreamDeals?.active || []).reduce((s, d) => s + d.fesPerWeek, 0);
+  const matchBonus  = team._fesMatchBonus || 0;
+  const eventBonus  = (team.fanEventWeek?.week === G.season.week) ? (team.fanEventWeek?.bonus || 0) : 0;
+
+  const fesRows = [
+    { label: 'Base (passive decay)',   val: -0.5 },
+    { label: `Streaming (${streamers.length} active)`, val: streamContrib },
+    { label: 'Marketing staff',        val: mktContrib },
+    { label: `Co-streaming deals (${(G.coStreamDeals?.active||[]).length})`, val: dealContrib },
+    { label: 'Match result',           val: matchBonus },
+    { label: 'Fan events this week',   val: eventBonus },
+  ].filter(r => r.val !== 0 || r.label.includes('Base'));
+
+  const fesBreakdown = fesRows.map(r => {
+    const c = r.val > 0 ? '#4caf50' : r.val < 0 ? '#f44336' : 'var(--text-dim)';
+    const sign = r.val > 0 ? '+' : '';
+    return `<div class="fes-row"><span class="fes-label">${r.label}</span><span class="fes-val" style="color:${c}">${sign}${r.val.toFixed(1)}</span></div>`;
+  }).join('');
+
+  // Player streaming list
+  const playerRows = Object.values(team.roster || {}).map(id => {
+    const p = G.players[id];
+    if (!p) return '';
+    if (!p.streaming) p.streaming = { active: false, schedule: 'casual' };
+    const active = p.streaming.active;
+    const sched  = p.streaming.schedule || 'casual';
+    const contrib = active ? (sched === 'heavy' ? '+0.8 FES/wk' : '+0.3 FES/wk') : '—';
+    return `<tr>
+      <td style="font-weight:600;color:var(--text-hi)">${p.name}</td>
+      <td><span class="pos-badge pos-${p.position}">${posLabel(p.position)}</span></td>
+      <td onclick="event.stopPropagation()">
+        <label class="stream-toggle" title="${active ? 'ON' : 'OFF'}">
+          <input type="checkbox" ${active ? 'checked' : ''} onchange="setPlayerStreaming('${p.id}',this.checked)">
+          <span class="stream-slider"></span>
+        </label>
+      </td>
+      <td>${active ? `<select class="stream-sched-select" onchange="setPlayerStreamSchedule('${p.id}',this.value)">
+          <option value="casual" ${sched==='casual'?'selected':''}>Casual</option>
+          <option value="heavy"  ${sched==='heavy' ?'selected':''}>Heavy</option>
+        </select>` : '<span style="color:var(--text-dim);font-size:11px">inactive</span>'}</td>
+      <td style="color:${active?'#4caf50':'var(--text-dim)'};font-size:11px">${contrib}</td>
+    </tr>`;
+  }).join('');
+
+  // Co-streaming active deals
+  const activeDeals = (G.coStreamDeals?.active || []).map(d => `
+    <div class="deal-card deal-active">
+      <div class="deal-name">${d.partner}</div>
+      <div class="deal-stats">
+        <span style="color:#4caf50">+${d.fesPerWeek} FES/wk</span>
+        ${d.costPerWeek > 0 ? `<span style="color:#f44336">−${fmtMoney(d.costPerWeek)}/wk</span>` : '<span style="color:var(--text-dim)">Free</span>'}
+        <span style="color:var(--text-dim)">${d.weeksRemaining}wk left</span>
+      </div>
+      <button class="btn-sm btn-danger" onclick="onCancelDeal('${d.id}')">Cancel</button>
+    </div>`).join('') || '<div style="color:var(--text-dim);font-size:12px">No active deals</div>';
+
+  // Co-streaming available deals
+  const availDeals = (G.coStreamDeals?.available || []).map(d => `
+    <div class="deal-card">
+      <div class="deal-name">${d.partner}</div>
+      <div class="deal-stats">
+        <span style="color:#4caf50">+${d.fesPerWeek} FES/wk</span>
+        ${d.costPerWeek > 0 ? `<span style="color:#f44336">−${fmtMoney(d.costPerWeek)}/wk</span>` : '<span style="color:var(--text-dim)">Free</span>'}
+        <span style="color:var(--text-dim)">${d.durationWeeks}wk</span>
+      </div>
+      <button class="btn-sm" onclick="onAcceptDeal('${d.id}')">Accept</button>
+    </div>`).join('') || '<div style="color:var(--text-dim);font-size:12px">No deals available — check back next week</div>';
+
+  // Fan events
+  const week = G.season.week;
+  const eventCards = Object.entries(FAN_EVENT_DEFS || {}).map(([key, def]) => {
+    const lastWeek = team.fanEvents?.[key] || 0;
+    const cdLeft = def.cooldownWeeks - (week - lastWeek);
+    const onCooldown = cdLeft > 0;
+    const canAfford = team.budget >= def.cost;
+    const disabled  = onCooldown || !canAfford;
+    const reason    = onCooldown ? `Cooldown: ${cdLeft}wk` : !canAfford ? 'Insufficient budget' : '';
+    return `<div class="event-card">
+      <div class="event-name">${def.label}</div>
+      <div class="event-stats">
+        <span style="color:#f44336">−${fmtMoney(def.cost)}</span>
+        <span style="color:#4caf50">+${def.fesBonus} FES</span>
+        ${def.trainingBlock > 0 ? `<span style="color:var(--text-dim)">No training ${def.trainingBlock}wk</span>` : ''}
+      </div>
+      ${reason ? `<div style="font-size:11px;color:var(--text-dim)">${reason}</div>` : ''}
+      <button class="btn-sm" onclick="onHostFanEvent('${key}')" ${disabled ? 'disabled' : ''}>Host</button>
+    </div>`;
+  }).join('');
+
+  setHtml('fans-content', `
+    <div class="fans-layout">
+
+      <!-- Fan Overview -->
+      <div class="fans-overview-card">
+        <div class="fans-overview-top">
+          <div class="fans-count-block">
+            <div class="fans-count-num">${fmtFans(fans)}</div>
+            <div class="fans-count-label">Total Fans</div>
+            <div style="font-size:13px;color:${fanDeltaColor}">${fanDeltaStr} this week</div>
+          </div>
+          <div class="fans-fes-block">
+            <div class="fes-gauge-wrap">
+              <svg width="100" height="60" viewBox="0 0 100 60">
+                <path d="M10,50 A40,40 0 0,1 90,50" stroke="#2a2a3a" stroke-width="10" fill="none"/>
+                <path d="M10,50 A40,40 0 0,1 90,50" stroke="${fesColor}" stroke-width="10" fill="none"
+                  stroke-dasharray="${fes * 12.57} 125.7" stroke-linecap="round"/>
+              </svg>
+              <div class="fes-gauge-val" style="color:${fesColor}">${fes.toFixed(1)}</div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--text-dim)">Fan Engagement Score</div>
+          </div>
+          <div class="fans-spark-block">
+            <svg width="190" height="36" viewBox="0 0 190 36">
+              <polyline points="${sparkPoints}" fill="none" stroke="#4fc3f7" stroke-width="2"/>
+            </svg>
+            <div style="font-size:10px;color:var(--text-dim);text-align:center">Last ${[...hist, fans].length} weeks</div>
+          </div>
+        </div>
+        <div class="fes-breakdown">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">FES Breakdown (this week)</div>
+          ${fesBreakdown}
+        </div>
+      </div>
+
+      <!-- Content & Streaming -->
+      <div class="fans-section">
+        <div class="fans-section-title">Content & Streaming</div>
+        ${marketing ? `<div class="fans-mkt-bar">
+          <span>Marketing Manager (${marketing.name}):</span>
+          <span style="color:#4caf50">+${mktContrib.toFixed(1)} FES/wk</span>
+          <div class="mkt-stat-bar-bg"><div class="mkt-stat-bar-fill" style="width:${(contProd/20)*100}%"></div></div>
+          <span style="font-size:11px;color:var(--text-dim)">Content Production ${contProd}/20</span>
+        </div>` : `<div style="font-size:12px;color:var(--text-dim)">No Marketing Manager hired — hire one to boost FES significantly. <a href="#" onclick="showMain('staff')">Go to Staff →</a></div>`}
+        <table class="fans-player-table" style="margin-top:12px">
+          <thead><tr><th>Player</th><th>Pos</th><th>Streaming</th><th>Schedule</th><th>FES/wk</th></tr></thead>
+          <tbody>${playerRows}</tbody>
+        </table>
+      </div>
+
+      <!-- Co-streaming Deals -->
+      <div class="fans-section">
+        <div class="fans-section-title">Co-streaming Deals</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Active partnerships provide weekly FES boosts and may cost weekly fees.</div>
+        <div class="deals-group-label">Active</div>
+        <div class="deals-row">${activeDeals}</div>
+        <div class="deals-group-label" style="margin-top:12px">Available Offers</div>
+        <div class="deals-row">${availDeals}</div>
+      </div>
+
+      <!-- Fan Events -->
+      <div class="fans-section">
+        <div class="fans-section-title">Fan Events</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">One-time events deliver big FES spikes but cost budget and may block training.</div>
+        <div class="events-row">${eventCards}</div>
+      </div>
+
+    </div>
+  `);
+}
+
+function onAcceptDeal(dealId) {
+  if (!G) return;
+  acceptCoStreamDeal(dealId);
+  renderFans();
+}
+
+function onCancelDeal(dealId) {
+  if (!G) return;
+  cancelCoStreamDeal(dealId);
+  renderFans();
+}
+
+function onHostFanEvent(eventKey) {
+  if (!G) return;
+  const result = hostFanEvent(eventKey);
+  if (!result.ok) { alert(result.msg); return; }
+  renderFans();
+  renderAll();
+}
+
+function fmtFans(n) {
+  if (n == null) return '—';
+  if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1000)    return (n / 1000).toFixed(1) + 'K';
+  return String(n);
 }
 
 // ─── Coaching Staff ───────────────────────────────────────────────────────────
