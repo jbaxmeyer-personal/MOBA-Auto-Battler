@@ -42,7 +42,7 @@ function initGame(humanTeamId) {
     };
   });
 
-  // Build player instance map (id → player with live morale/form)
+  // Build player instance map (id → player with live morale/form/career)
   const players = {};
   PLAYER_DB.forEach(p => {
     players[p.id] = {
@@ -54,8 +54,35 @@ function initGame(humanTeamId) {
       form:   [6, 6, 6],
       injured: false,
       onTransferList: false,
+      // Career stats — accumulated across all matches this player appears in
+      career: {
+        gamesPlayed: 0,
+        wins:        0,
+        losses:      0,
+        kills:       0,
+        deaths:      0,
+        assists:     0,
+        cs:          0,
+        damageDealt: 0,
+        // Per-champion breakdown: { [champName]: { games, kills, deaths, assists } }
+        championStats: {},
+      },
     };
   });
+
+  // World stats — aggregate tracking across every simulated match (AI vs AI + human)
+  const stats = {
+    totalMatches: 0,
+    // All-time leaderboards (sorted arrays rebuilt on demand)
+    leaderboards: {
+      kills:       [],   // { playerId, name, value }
+      assists:     [],
+      cs:          [],
+      kda:         [],   // (kills+assists)/deaths
+      damageDealt: [],
+      winRate:     [],   // wins / gamesPlayed (min 5 games)
+    },
+  };
 
   G = {
     humanTeamId,
@@ -63,6 +90,7 @@ function initGame(humanTeamId) {
     players,
     freeAgents: PLAYER_DB.filter(p => !p.teamId).map(p => p.id),
     season,
+    stats,
     news:   [],
     selectedPlayerId: null,
   };
