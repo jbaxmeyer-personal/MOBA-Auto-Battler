@@ -210,19 +210,56 @@
     <div class="pbp-body-wrap">
       <div class="pbp-map-wrap">
         <svg id="pbp-map-svg" class="pbp-map-svg" viewBox="0 0 300 300">
-          <rect width="300" height="300" fill="#0d1f0d" rx="4"/>
-          <line x1="0" y1="300" x2="300" y2="0" stroke="#1a3a1a" stroke-width="28"/>
-          <ellipse cx="78" cy="78" rx="22" ry="18" fill="#1a2a3a" stroke="#2a3a5a" stroke-width="1.5"/>
-          <text x="78" y="82" text-anchor="middle" font-size="9" fill="#4a6a8a">WARDEN</text>
-          <ellipse cx="222" cy="222" rx="22" ry="18" fill="#2a1a0a" stroke="#4a3a1a" stroke-width="1.5"/>
-          <text x="222" y="226" text-anchor="middle" font-size="9" fill="#8a6a2a">SHRINE</text>
-          <rect x="2" y="240" width="58" height="58" rx="4" fill="#0d1a2a" stroke="#1e3050" stroke-width="1.5"/>
-          <text x="31" y="274" text-anchor="middle" font-size="8" fill="#4fc3f7">BASE</text>
-          <rect x="240" y="2" width="58" height="58" rx="4" fill="#2a0d0d" stroke="#501e1e" stroke-width="1.5"/>
-          <text x="269" y="36" text-anchor="middle" font-size="8" fill="#ff7b7b">BASE</text>
-          <line x1="60" y1="240" x2="240" y2="60" stroke="#1a3a1a" stroke-width="10" stroke-linecap="round"/>
-          <polyline points="18,240 18,18 240,18" fill="none" stroke="#1a3a1a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-          <polyline points="60,282 282,282 282,60" fill="none" stroke="#1a3a1a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- TAG Hex Map — The Ancient Grove -->
+          <!-- Dark void outside the hex -->
+          <rect width="300" height="300" fill="#050e05"/>
+          <!-- Hex boundary (diamond: Blue bottom-left, Red top-right) -->
+          <polygon points="150,4 296,4 296,150 150,296 4,296 4,150" fill="#0c1c0c" stroke="#1e381e" stroke-width="2"/>
+          <!-- Forest zones between lanes -->
+          <polygon points="22,278 4,150 150,4 278,22 150,150" fill="#091509" opacity="0.75"/>
+          <polygon points="22,278 150,296 296,150 278,22 150,150" fill="#091509" opacity="0.75"/>
+          <!-- Lanes — base layer (wide dark path) -->
+          <polyline points="22,278 4,150 150,4 278,22" fill="none" stroke="#122212" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="22,278 150,296 296,150 278,22" fill="none" stroke="#122212" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="22" y1="278" x2="278" y2="22" stroke="#122212" stroke-width="22" stroke-linecap="round"/>
+          <!-- Lanes — surface (lighter vine-path texture) -->
+          <polyline points="22,278 4,150 150,4 278,22" fill="none" stroke="#1d3a1a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="22,278 150,296 296,150 278,22" fill="none" stroke="#1d3a1a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="22" y1="278" x2="278" y2="22" stroke="#1d3a1a" stroke-width="9" stroke-linecap="round"/>
+          <!-- Blue-side jungle camp (~72,162) -->
+          <circle cx="72" cy="162" r="11" fill="#0f1e0f" stroke="#2d4d1a" stroke-width="1.2"/>
+          <text x="72" y="166" text-anchor="middle" font-size="9" fill="#3d6424">✦</text>
+          <!-- Red-side jungle camp (~228,138) -->
+          <circle cx="228" cy="138" r="11" fill="#1e0f0f" stroke="#4d2d1a" stroke-width="1.2"/>
+          <text x="228" y="142" text-anchor="middle" font-size="9" fill="#644024">✦</text>
+          <!-- Ley Shrine A (~120,130) -->
+          <polygon points="120,121 128,131 120,138 112,131" fill="#111e07" stroke="#8bc34a" stroke-width="1.8"/>
+          <circle cx="120" cy="130" r="4" fill="#8bc34a" opacity="0.25"/>
+          <text x="120" y="151" text-anchor="middle" font-size="6" fill="#8bc34a" font-weight="bold">SHRINE</text>
+          <!-- Ley Shrine B (~180,170) -->
+          <polygon points="180,161 188,171 180,178 172,171" fill="#111e07" stroke="#8bc34a" stroke-width="1.8"/>
+          <circle cx="180" cy="170" r="4" fill="#8bc34a" opacity="0.25"/>
+          <text x="180" y="191" text-anchor="middle" font-size="6" fill="#8bc34a" font-weight="bold">SHRINE</text>
+          <!-- Grove Warden spawn (150,150) -->
+          <circle cx="150" cy="150" r="14" fill="#16130a" stroke="#c89b3c" stroke-width="2"/>
+          <circle cx="150" cy="150" r="7" fill="none" stroke="#c89b3c" stroke-width="1" opacity="0.5"/>
+          <text x="150" y="154" text-anchor="middle" font-size="6" fill="#c89b3c" font-weight="bold">WARDEN</text>
+          <!-- Blue Ancient Roots (near Blue base) -->
+          <circle cx="50" cy="248" r="5" fill="none" stroke="#4caf50" stroke-width="1.3" opacity="0.55"/>
+          <circle cx="37" cy="228" r="5" fill="none" stroke="#4caf50" stroke-width="1.3" opacity="0.55"/>
+          <circle cx="65" cy="262" r="4" fill="none" stroke="#4caf50" stroke-width="1.1" opacity="0.4"/>
+          <!-- Red Ancient Roots (near Red base) -->
+          <circle cx="250" cy="52" r="5" fill="none" stroke="#f44336" stroke-width="1.3" opacity="0.55"/>
+          <circle cx="263" cy="72" r="5" fill="none" stroke="#f44336" stroke-width="1.3" opacity="0.55"/>
+          <circle cx="235" cy="38" r="4" fill="none" stroke="#f44336" stroke-width="1.1" opacity="0.4"/>
+          <!-- Blue Base -->
+          <circle cx="22" cy="278" r="16" fill="#0d1a2a" stroke="#1e3050" stroke-width="2"/>
+          <circle cx="22" cy="278" r="9" fill="#0d2040" stroke="#4fc3f7" stroke-width="1.2" opacity="0.8"/>
+          <text x="22" y="282" text-anchor="middle" font-size="7" fill="#4fc3f7" font-weight="bold">BASE</text>
+          <!-- Red Base -->
+          <circle cx="278" cy="22" r="16" fill="#2a0d0d" stroke="#501e1e" stroke-width="2"/>
+          <circle cx="278" cy="22" r="9" fill="#401010" stroke="#ff7b7b" stroke-width="1.2" opacity="0.8"/>
+          <text x="278" y="26" text-anchor="middle" font-size="7" fill="#ff7b7b" font-weight="bold">BASE</text>
           <circle id="map-event-ring" cx="150" cy="150" r="0" fill="none" stroke="#fff" stroke-width="2.5" opacity="0"/>
           <circle id="map-b-vanguard"  class="map-dot map-dot-blue" cx="28"  cy="165" r="7"/>
           <circle id="map-b-ranger"    class="map-dot map-dot-blue" cx="82"  cy="170" r="7"/>
@@ -248,7 +285,7 @@
         <div class="pbp-map-legend">
           <span class="map-leg-blue">● Blue</span>
           <span class="map-leg-red">● Red</span>
-          <span class="map-leg-dim">V R A H W</span>
+          <span class="map-leg-dim">V=Vanguard R=Ranger A=Arcanist H=Hunter W=Warden</span>
         </div>
         <div class="gold-chart-wrap">
           <div class="gold-chart-label">Gold Lead</div>
