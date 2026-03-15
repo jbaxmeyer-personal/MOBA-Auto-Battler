@@ -14,12 +14,14 @@
 |---|---|
 | Balance & Polish (Phase 8) | Meta system, UI polish, playtesting — not started |
 | Visual Identity (Phase 10) | Pixel-art sprites on map; long-term: isometric PixiJS view |
-| Scouting depth | Scout pool is small; scouting UX could use more depth |
-| AI manager behaviour | CPU teams don't use staff/facilities/tactics — purely sim-driven |
-| Contract negotiations | Players can't counter-offer or walk away; no bidding wars |
-| Transfer market | No AI-to-AI transfers between seasons |
-| Fan events cooldown UX | No in-game calendar showing upcoming event availability |
-| Gaming House | Deferred in Phase 9 — team housing bonuses not built yet |
+| Phase 12A — Scouting Depth | Expand scout pool, multi-scout, regional prospects, UX overhaul |
+| Phase 12B — AI Manager Behaviour | CPU facilities, virtual staff, tactical adaptation, offseason roster moves |
+| Phase 12C — Contract Negotiations | Counter-offers, player rejection, bidding wars |
+| Phase 12D — Transfer Market | Transfer fees, CPU team transactions, transfer listing, loans |
+| Phase 12E — Fan Events Cooldown UX | 8-week event calendar timeline in Fans panel |
+| Phase 12F — Team Housing | New facility tier (Apartment → Gaming House) with morale/chemistry/FES bonuses |
+| Balance & Polish (Phase 8) | Meta system, UI polish, playtesting — not started |
+| Visual Identity (Phase 10) | Pixel-art sprites on map; long-term: isometric PixiJS view |
 
 ---
 
@@ -37,6 +39,7 @@ Phase 7 → Career Structure       (BO3/BO5 series, full playoffs, multi-season,
 Phase 8 → Balance & Polish       (meta system, UI polish, playtesting)
 Phase 9 → Management Hub         (News, Coaching Staff, Streaming, Facilities, Team Info, Champ Info, Item Info, Statistics, Manager Traits)  ✅ DONE
 Phase 11 → Management Depth v2   (Fans/FES, Staff overhaul, Facilities queue, Multi-role champs, Tactics phase)  ✅ DONE
+Phase 12 → Depth & Realism       (Scouting, AI managers, Contracts, Transfers, Fan calendar, Team Housing)
 Phase 10 → Visual Identity       (pixel-art 2D sprites → long-term: isometric view with PixiJS)
 ```
 
@@ -989,6 +992,191 @@ G.teams[humanTeamId].tactics = {
 #### Between-games simplified tactics
 - The existing `_showBetweenGames()` panel already lets you change playstyle — expand it to show a condensed version of the tactics screen (same 9 dimensions, but in a single column, no matchup panel since we're mid-series)
 - Remove the playstyle grid from between-games, replace with the full tactic dimensions as small toggle rows
+
+---
+
+## Phase 12 — Depth & Realism (Next Major Session)
+**Goal:** Make the management sim feel alive and reactive — players push back on contracts, CPU orgs behave like real teams, scouting feels like discovery, and your housing actually matters.
+**Status:** [ ] Planned
+
+---
+
+### 12A — Scouting Depth
+
+**Problem:** The scout pool has 5 prospects and scouting is a one-click wait. It feels like a timer, not a discovery.
+
+#### Expanded scout pool
+- Grow `SCOUT_POOL` from 5 to 20 prospects across all positions and nationalities
+- Each prospect has a `region` field (`'EU'` | `'NA'` | `'KOR'` | `'SEA'`) that affects base scouting cost (closer = cheaper)
+- Prospects have a `visibility` field (`'unknown'` | `'rumoured'` | `'scouted'`) — you can only see full stats once scouted
+- Before scouting: show only Age, Region, Position, and a blurred potential indicator
+- After scouting: full stat reveal + contract ask
+
+#### Multi-scout capability
+- If your Scout staff member has `networkReach >= 14`, you can run **2 concurrent scouting assignments** instead of 1
+- Shows two scout slots in the Scouting panel
+
+#### Scouting panel UX overhaul
+- **Available Prospects** section: list of all undiscovered prospects (Age, Region, Pos, "???" for stats) with a Scout button
+- **Active Assignments** section: shows in-progress scouts with a progress bar (weeks remaining / total)
+- **Reports Archive** section: all completed reports, sorted by date — with a "Sign" shortcut button to jump to transfers
+- Scout cost scales with `Scout.costEfficiency` attribute (higher = cheaper)
+- Scout speed scales with `Scout.speed` attribute (higher = fewer weeks)
+
+#### Region weighting
+- Your Scout's `specialisation` attribute biases discovered prospects toward certain roles (e.g. high specialisation + Scout hired as "ADC specialist" finds more ADC prospects)
+- Add a `specialisation` label to Scout staff cards: `'all roles'` | `'carries'` | `'frontline'` | `'jungle'`
+
+---
+
+### 12B — AI Manager Behaviour
+
+**Problem:** CPU teams are just stat bags. They never upgrade facilities, hire staff, adjust tactics, or react to their roster situation.
+
+#### What CPU managers will now do each week (for all non-human teams, lighter simulation)
+
+1. **Facility upgrades** (once per season, if budget > threshold)
+   - Each CPU team has a hidden `aiPersonality`: `'aggressive'` | `'balanced'` | `'conservative'`
+   - Aggressive teams spend more on facilities; conservative teams hoard budget
+   - CPU picks a random facility to upgrade if `budget > upgrade_cost * 2` and facility isn't maxing
+
+2. **Virtual staff bonuses** (no hiring UI, just stat modifiers)
+   - Each CPU team gets a hidden `staffQuality` (1–10) assigned at game start, scaled to their `prestige`
+   - This directly modifies their training gain rates and draft quality, simulating having good/bad staff
+   - High-prestige teams get staffQuality 7–10; low-prestige 3–6
+
+3. **Tactical adaptation between series games**
+   - CPU teams have a `adaptability` rating (derived from `staffQuality`)
+   - After losing a game in a series, they have a chance to switch tactics (change `playstyle` and `combatStrategy`)
+   - High adaptability = more likely to counter your comp in game 2/3
+
+4. **Roster management (offseason)**
+   - CPU teams release players whose contracts expire and `morale < 5` or `overall < 60`
+   - CPU teams sign from free agents pool to fill empty roster spots
+   - This keeps the league feeling dynamic season-over-season
+
+#### `aiPersonality` constants
+```js
+const AI_PERSONALITIES = {
+  aggressive:   { facilitySpendMult: 1.4, rosterTurnover: 0.3, tacticsAdapt: 0.7 },
+  balanced:     { facilitySpendMult: 1.0, rosterTurnover: 0.2, tacticsAdapt: 0.5 },
+  conservative: { facilitySpendMult: 0.6, rosterTurnover: 0.1, tacticsAdapt: 0.3 },
+};
+```
+
+---
+
+### 12C — Contract Negotiations
+
+**Problem:** Offering a contract is a one-click "accept or leave." Players have no voice.
+
+#### New negotiation flow
+
+When you offer a contract (renewal or new signing), the player responds:
+
+1. **Accept** — player signs immediately (happy with terms)
+2. **Counter-offer** — player proposes different salary/years:
+   - Salary counter: +10–30% above your offer (based on `morale`, `overall`, and market demand)
+   - Years counter: wants shorter deal if morale is low; longer if morale is high
+   - You can **Accept Counter**, **Negotiate** (split the difference), or **Walk Away**
+3. **Reject** — player declines entirely (happens if offer is far below market value)
+   - Player goes on transfer list if it's a renewal; stays but morale drops
+   - News item: `"[Player] has rejected a contract renewal — he wants to explore his options."`
+
+#### Market value formula
+```
+marketValue = (overall * 2000) + (age < 22 ? potential_bonus : 0) - (age > 28 ? decline_penalty : 0)
+weeklyMarketRate = marketValue / 52
+```
+
+#### Bidding wars (for free agents)
+- When you make an offer to a free agent, there's a chance (based on their overall) that an AI team also bids
+- You get a news item: `"[Team] has also made an offer to [Player] — they want [salary]/wk."`
+- You can match, beat, or concede
+- Player picks highest offer, with a slight bias toward human team if salary is within 10%
+
+#### UI changes
+- Contract offer modal gains a response panel below: shows player's reaction with avatar/mood badge
+- Counter-offer shows as a separate card with Accept/Negotiate/Decline buttons
+- Bidding war alert shown as an orange banner in the transfer panel
+
+---
+
+### 12D — Transfer Market
+
+**Problem:** Between seasons, rosters feel static. CPU teams don't move players around.
+
+#### Transfer window (offseason only)
+- Transfer window opens at season end, closes when new season starts
+- Human player can buy/sell players during window (existing flow)
+- **CPU teams now also transact:**
+  - Release players (contract expired or morale < 4)
+  - Sign free agents from the pool
+  - Occasionally trade players between themselves (rare, ≤1 per offseason)
+
+#### Transfer fees
+- When poaching a contracted player from a CPU team, you now pay a **transfer fee**:
+  ```
+  fee = overall * 3000 + (yearsLeft * salary * 26)
+  ```
+- CPU teams can reject a bid if fee offered is too low (fee < 80% of calculated fee)
+- News item generated: `"[Team] has accepted a bid for [Player]. Transfer fee: [X]."`
+
+#### Transfer listing
+- CPU teams put players on transfer list if morale < 4 or contract expires in < 1 year
+- Human team can see transfer-listed players in a dedicated "Transfer Listed" filter tab in Transfers panel
+- Transfer-listed players from CPU teams show their asking fee
+
+#### Loan system (simple)
+- Human can loan a player out to a CPU team for 1 season:
+  - CPU team pays 50% of weekly wages
+  - Player gains `+0.5 morale/week` from playing time (if benched on your team)
+- Can also loan a prospect from the free agent pool to your academy for development
+
+---
+
+### 12E — Fan Events Cooldown UX
+
+**Problem:** You have to mentally track when fan events are available. No visual timeline.
+
+#### Event availability timeline
+- In the Fans panel, below the Fan Events section, add a **"Event Calendar"** row
+- Shows the next 8 weeks as a row of week boxes (Week N, Week N+1, …)
+- Each event type has a colored dot under each week box:
+  - 🟢 Available
+  - 🔴 On cooldown (shows weeks remaining as a number)
+  - 🟡 Recently completed (the week it was done)
+- Hovering a week box shows a tooltip: `"Meet & Greet available in 2 weeks"`
+
+#### Quick-schedule button
+- When an event becomes available, a subtle "Available now!" badge appears on the Fan Events section header
+- Clicking it scrolls to that event's card
+
+---
+
+### 12F — Team Housing (replaces Gaming House, merged into Facilities)
+
+**Core concept:** Your team needs somewhere to live and practice together. This starts basic and grows into a proper gaming house — a real org investment that affects morale, team chemistry, and (at top tier) streaming quality.
+
+#### New facility: Team Housing
+
+Add to `FACILITY_DEFS` as `'housing'`:
+
+| Level | Name | Build Time | Cost | Weekly Upkeep | Bonuses |
+|---|---|---|---|---|---|
+| 1 | Studio Apartment | — (default) | — | $500/wk | No bonus (baseline) |
+| 2 | Shared Apartment | 2 wks | $80,000 | $1,500/wk | Morale floor +0.5 (players don't drop below 4.5) |
+| 3 | Team House | 3 wks | $200,000 | $3,500/wk | Morale floor +1.0 · Chemistry +0.3 |
+| 4 | Premium Team House | 4 wks | $500,000 | $7,000/wk | Morale floor +1.5 · Chemistry +0.5 · Training gains +5% |
+| 5 | Gaming House | 6 wks | $1,200,000 | $15,000/wk | Morale floor +2.0 · Chemistry +1.0 · Training +10% · FES +0.5/wk |
+
+**How bonuses apply:**
+- **Morale floor**: players' morale never falls below `(4 + floor_bonus)` — housing keeps them comfortable
+- **Chemistry**: added to `calcChemistry()` as a passive bonus
+- **Training gains**: multiplier stacked with Training Facility bonus
+- **FES +0.5**: Gaming House has streaming setup built-in — adds directly to weekly FES calculation
+
+**UI:** Housing facility card in the Facilities panel shows a small "home" illustration level description (the name of each tier). The upgrade tooltip explains what the next level adds in plain language.
 
 ---
 
