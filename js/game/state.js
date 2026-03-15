@@ -207,9 +207,9 @@ function buildStartingLineup(teamId) {
 }
 
 function calcWagesBill(teamId) {
-  return PLAYER_DB
+  return Math.round(PLAYER_DB
     .filter(p => p.teamId === teamId)
-    .reduce((sum, p) => sum + (p.contract.salary || 0), 0);
+    .reduce((sum, p) => sum + (p.contract.salary || 0), 0) / 52);
 }
 
 // ─── Season builder ───────────────────────────────────────────────────────────
@@ -278,6 +278,7 @@ function advanceWeek() {
 
   // Weekly finances: wages out, sponsor income in (all teams)
   Object.values(G.teams).forEach(t => {
+    t.weeklyWages = calcWagesBill(t.id);
     const wages  = t.weeklyWages;
     const income = t.sponsorIncome;
     t.budget = (t.budget || 0) - wages + income;

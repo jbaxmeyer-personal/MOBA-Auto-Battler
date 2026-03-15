@@ -587,9 +587,22 @@ function advanceDraft() {
     renderInteractiveDraft(_draftAvailableChamps(ds.step));
   } else {
     renderInteractiveDraft(null);
+    const stepSnapshot = ds.step;
     setTimeout(() => {
-      const c = _cpuDraftAction(ds.step);
-      if (c) applyDraftAction(c);
+      if (!_draftState || _draftState.done || _draftState.step !== stepSnapshot) return;
+      try {
+        const taken = new Set([
+          ..._draftState.bans.blue, ..._draftState.bans.red,
+          ..._draftState.bluePicks.map(p => p.champion),
+          ..._draftState.redPicks.map(p => p.champion),
+        ]);
+        const c = _cpuDraftAction(stepSnapshot)
+          || Object.keys(CHAMPIONS).find(k => !taken.has(k))
+          || Object.keys(CHAMPIONS)[0];
+        applyDraftAction(c);
+      } catch(e) {
+        console.error('CPU draft error at step', stepSnapshot, e);
+      }
     }, 420);
   }
 }

@@ -175,10 +175,10 @@ function renderDashboard() {
     const roundLabel = nextMatch.isPlayoff ? ` — ${nextMatch.round === 'final' ? 'Grand Final' : 'Semi-Final'}` : '';
     nextMatchEl.innerHTML = `
       <strong>Week ${nextMatch.week}${roundLabel}</strong><br>
-      ${isHome ? team.shortName : opp.shortName}
+      ${isHome ? team.name : opp.name}
       <span style="color:var(--text-dim)"> vs </span>
-      ${isHome ? opp.shortName : team.shortName}<br>
-      <span style="font-size:11px;color:var(--text-dim)">${opp.name} · ${opp.wins}W ${opp.losses}L · ${fmtLabel}</span>
+      ${isHome ? opp.name : team.name}<br>
+      <span style="font-size:11px;color:var(--text-dim)">${opp.wins}W ${opp.losses}L · ${fmtLabel}</span>
     `;
     if (playBtn) {
       playBtn.style.display = 'block';
@@ -208,10 +208,10 @@ function renderDashboard() {
   // Mini standings
   const standings = getStandings();
   setHtml('dash-standings', standings.map((t, i) => `
-    <div class="mini-row${t.id === G.humanTeamId ? ' mini-human' : ''}">
+    <div class="mini-row${t.id === G.humanTeamId ? ' mini-human' : ''}" style="cursor:pointer" onclick="showTeamDetail('${t.id}')">
       <span class="mini-pos">${i+1}</span>
       <span class="mini-dot" style="background:${G.teams[t.id].color}"></span>
-      <span class="mini-name">${t.shortName}</span>
+      <span class="mini-name">${t.name}</span>
       <span class="mini-record">${t.wins}W ${t.losses}L</span>
     </div>
   `).join(''));
@@ -434,9 +434,7 @@ function signFreeAgent(playerId) {
 
   // Remove from free agents list
   G.freeAgents = G.freeAgents.filter(id => id !== playerId);
-  team.weeklyWages = Object.values(G.players)
-    .filter(pl => pl.teamId === G.humanTeamId)
-    .reduce((s, pl) => s + (pl.contract.salary || 0), 0);
+  team.weeklyWages = calcWagesBill(G.humanTeamId);
 
   addNews(`Signed ${p.name} (${posLabel(p.position)}, OVR ${calcOverall(p)}).`, 'info');
   renderTransfers('free-agents');
@@ -604,7 +602,7 @@ function renderLeague() {
       </tr></thead>
       <tbody>
         ${standings.map((t, i) => `
-          <tr class="${t.id === G.humanTeamId ? 'row-human' : ''} ${i < 4 ? 'row-bracket' : ''}">
+          <tr class="${t.id === G.humanTeamId ? 'row-human' : ''} ${i < 4 ? 'row-bracket' : ''}" style="cursor:pointer" onclick="showTeamDetail('${t.id}')">
             <td style="color:var(--text-dim)">${i+1}</td>
             <td>
               <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${G.teams[t.id].color};margin-right:6px;vertical-align:middle"></span>
@@ -618,6 +616,77 @@ function renderLeague() {
       </tbody>
     </table>
     <p class="bracket-note">Top 4 advance to playoffs.</p>
+  `);
+}
+
+// ─── Team Detail ──────────────────────────────────────────────────────────────
+
+function showTeamDetail(teamId) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-team-detail')?.classList.add('active');
+  renderTeamDetail(teamId);
+}
+
+function renderTeamDetail(teamId) {
+  if (!G) return;
+  const team = G.teams[teamId];
+  if (!team) return;
+
+  setText('team-detail-name', team.name);
+
+  const players = POSITIONS.map(pos => team.roster[pos] ? G.players[team.roster[pos]] : null);
+  const record = `${team.wins}W – ${team.losses}L · ${team.points} pts`;
+
+  const rows = players.map(p => {
+    if (!p) return `<tr><td colspan="8" style="color:var(--text-dim)">Empty slot</td></tr>`;
+    const ovr = calcOverall(p);
+    const kda  = p.career?.gamesPlayed
+      ? `${(p.career.kills/p.career.gamesPlayed).toFixed(1)}/${(p.career.deaths/p.career.gamesPlayed).toFixed(1)}/${(p.career.assists/p.career.gamesPlayed).toFixed(1)}`
+      : '—';
+    const cs = p.career?.gamesPlayed ? Math.round(p.career.cs / p.career.gamesPlayed) : '—';
+    const wr = p.career?.gamesPlayed ? `${Math.round(p.career.wins/p.career.gamesPlayed*100)}%` : '—';
+    const isHuman = teamId === G.humanTeamId;
+    return `<tr>
+      <td><span class="pos-badge pos-${p.position}">${posLabel(p.position)}</span></td>
+      <td style="font-weight:600">${_escHtml(p.name)}</td>
+      <td style="color:var(--gold);font-weight:600">${ovr}</td>
+      <td style="color:var(--text-dim)">${p.age}</td>
+      <td style="color:var(--text-dim)">${p.nationality}</td>
+      <td>${kda}</td>
+      <td style="color:var(--text-dim)">${cs}</td>
+      <td style="color:${wr !== '—' && parseInt(wr)>=50 ? 'var(--win)' : 'var(--loss)'}">${wr}</td>
+    </tr>`;
+  }).join('');
+
+  const champRows = players.filter(Boolean).map(p => {
+    const champs = (p.champions || []).slice(0, 4).join(', ') || '—';
+    return `<tr>
+      <td><span class="pos-badge pos-${p.position}">${posLabel(p.position)}</span></td>
+      <td style="font-weight:600">${_escHtml(p.name)}</td>
+      <td style="color:var(--text-dim);font-size:12px">${champs}</td>
+    </tr>`;
+  }).join('');
+
+  setHtml('team-detail-content', `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${team.color}"></span>
+      <span style="font-size:18px;font-weight:700;color:${team.color}">${_escHtml(team.name)}</span>
+      <span style="color:var(--text-dim);margin-left:8px">${record}</span>
+      ${teamId === G.humanTeamId ? '<span style="color:var(--gold);font-size:11px;margin-left:6px">YOUR TEAM</span>' : ''}
+    </div>
+    <h3 style="margin-bottom:8px;font-size:13px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Roster</h3>
+    <table class="standings" style="margin-bottom:24px">
+      <thead><tr>
+        <th>Pos</th><th>Player</th><th>OVR</th><th>Age</th><th>Nat</th><th>KDA/g</th><th>CS/g</th><th>WR</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <h3 style="margin-bottom:8px;font-size:13px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Champion Pools</h3>
+    <table class="standings">
+      <thead><tr><th>Pos</th><th>Player</th><th>Champions</th></tr></thead>
+      <tbody>${champRows}</tbody>
+    </table>
   `);
 }
 
@@ -642,15 +711,15 @@ function renderSchedule() {
             result = `<span class="sched-result ${humanWon ? 'sched-win' : 'sched-loss'}">${humanWon ? 'W' : 'L'} ${score}</span>`;
           } else {
             const won = m.result.winnerId === m.homeId;
-            result = `<span class="sched-upcoming" style="color:${won ? 'var(--win)':'var(--loss)'}">${G.teams[m.result.winnerId].shortName} won ${score}</span>`;
+            result = `<span class="sched-upcoming" style="color:${won ? 'var(--win)':'var(--loss)'}">${G.teams[m.result.winnerId].name} won ${score}</span>`;
           }
         } else {
           result = `<span class="sched-upcoming">Upcoming</span>`;
         }
         return `<div class="sched-match ${isHuman ? 'sched-human' : ''}">
-          <span class="sched-team" style="color:${home.color}">${home.shortName}</span>
+          <span class="sched-team" style="color:${home.color};cursor:pointer" onclick="showTeamDetail('${m.homeId}')">${home.name}</span>
           <span class="sched-vs">vs</span>
-          <span class="sched-team" style="color:${away.color}">${away.shortName}</span>
+          <span class="sched-team" style="color:${away.color};cursor:pointer" onclick="showTeamDetail('${m.awayId}')">${away.name}</span>
           ${result}
         </div>`;
       }).join('')}
