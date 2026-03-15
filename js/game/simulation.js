@@ -1,1255 +1,987 @@
-// js/game/simulation.js — Grove Manager Phase 4D
-// Full stat-driven sim engine for The Ancient Grove.
-//
-// Public API (unchanged):
-//   draftChampions(blueTeamArr, redTeamArr) → draft result
-//   simulateMatch(blueTeamArr, redTeamArr, blueName, redName) → full PBP result
-//   quickSimulate(blueTeamArr, redTeamArr) → 'blue' | 'red'
+// js/game/simulation.js — Real tick-based agent simulation engine
+// Phase 6: Every champion is a live agent with position, HP, state machine, target.
+// Events and kills EMERGE from simulation — nothing is scripted or predetermined.
 
 'use strict';
 
-// ─── SECTION 1: Utilities ─────────────────────────────────────────────────────
+// ─── Engine constants ─────────────────────────────────────────────────────────
 
-function rand(min, max)  { return Math.random() * (max - min) + min; }
-function rInt(min, max)  { return Math.floor(rand(min, max + 1)); }
-function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-function pick(arr)       { return arr[Math.floor(Math.random() * arr.length)]; }
-function shuffle(a)      { const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b; }
-function fmt(min)        { const m=Math.floor(min),s=Math.floor((min-m)*60); return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
-function chance(pct)     { return Math.random() * 100 < pct; }
+const TICK_S         = 3;     // in-game seconds per engine tick
+const MAX_TICKS      = 240;   // 12 in-game minutes
+const MOVE_SCALE     = 60;    // moveSpeed unit → px/tick = moveSpeed * TICK_S / MOVE_SCALE
+const STR_DMG_REDUCE = 0.22;  // fraction of damage champions deal to structures
 
-// ─── SECTION 2: Map Positions (300×300 SVG) ───────────────────────────────────
-// Blue base = bottom-left, Red base = top-right.
-
-const LANE_POSITIONS = {
-  blue: { vanguard:{x:28,y:165}, ranger:{x:82,y:170}, arcanist:{x:92,y:208}, hunter:{x:72,y:268}, warden:{x:90,y:274} },
-  red:  { vanguard:{x:272,y:45}, ranger:{x:218,y:132}, arcanist:{x:208,y:92}, hunter:{x:228,y:268}, warden:{x:210,y:274} },
+// Attack / aggro ranges in map pixels (map is 300×300)
+const CLASS_RANGES = {
+  tank:     { atk:  8, aggro: 28 },
+  fighter:  { atk: 10, aggro: 30 },
+  assassin: { atk: 12, aggro: 32 },
+  mage:     { atk: 52, aggro: 58 },
+  marksman: { atk: 58, aggro: 64 },
+  sentinel: { atk: 46, aggro: 52 },
 };
 
-const SCENES = {
-  laning:      LANE_POSITIONS,
-  northShrine: {
-    blue: { vanguard:{x:55,y:100}, ranger:{x:70,y:115}, arcanist:{x:80,y:140}, hunter:{x:40,y:170}, warden:{x:55,y:175} },
-    red:  { vanguard:{x:100,y:75}, ranger:{x:120,y:90}, arcanist:{x:110,y:80}, hunter:{x:85,y:55},  warden:{x:95,y:60}  },
-  },
-  southShrine: {
-    blue: { vanguard:{x:185,y:210}, ranger:{x:175,y:195}, arcanist:{x:170,y:200}, hunter:{x:200,y:235}, warden:{x:190,y:240} },
-    red:  { vanguard:{x:225,y:185}, ranger:{x:238,y:172}, arcanist:{x:245,y:168}, hunter:{x:230,y:215}, warden:{x:220,y:220} },
-  },
-  center: {
-    blue: { vanguard:{x:118,y:158}, ranger:{x:133,y:145}, arcanist:{x:145,y:162}, hunter:{x:110,y:172}, warden:{x:122,y:178} },
-    red:  { vanguard:{x:178,y:138}, ranger:{x:165,y:152}, arcanist:{x:155,y:138}, hunter:{x:185,y:155}, warden:{x:172,y:165} },
-  },
-  bluePush: {
-    blue: { vanguard:{x:215,y:75}, ranger:{x:198,y:90}, arcanist:{x:225,y:62}, hunter:{x:238,y:58}, warden:{x:205,y:72} },
-    red:  { vanguard:{x:252,y:52}, ranger:{x:262,y:42}, arcanist:{x:258,y:32}, hunter:{x:272,y:38}, warden:{x:268,y:28} },
-  },
-  redPush: {
-    blue: { vanguard:{x:48,y:252}, ranger:{x:38,y:262}, arcanist:{x:44,y:272}, hunter:{x:28,y:258}, warden:{x:32,y:248} },
-    red:  { vanguard:{x:78,y:228}, ranger:{x:93,y:218}, arcanist:{x:102,y:208}, hunter:{x:112,y:238}, warden:{x:72,y:235} },
-  },
+// XP thresholds (cumulative) for levels 1→10
+const XP_THRESH  = [0, 150, 400, 750, 1200, 1750, 2400, 2650, 2950, 3300];
+const XP_CS      = 32;
+const XP_JG_SM   = 65;
+const XP_JG_LG   = 125;
+const XP_KILL    = 300;
+const XP_ASSIST  = 150;
+const XP_OBJ     = 120;
+const XP_WARDEN  = 200;
+
+// ─── Map layout (300×300 pixel space) ────────────────────────────────────────
+// Blue = bottom-left corner, Red = top-right corner.
+
+const SPAWN = {
+  blue: { x: 22,  y: 278 },
+  red:  { x: 278, y: 22  },
 };
 
-function scene(name, jitter) {
-  jitter = jitter === undefined ? 8 : jitter;
-  var s = SCENES[name] || SCENES.center;
-  var j = function() { return rInt(-jitter, jitter); };
-  var jt = function(side) {
-    var out = {};
-    Object.entries(s[side]).forEach(function(entry) {
-      var pos = entry[0], p = entry[1];
-      out[pos] = { x: clamp(p.x + j(), 5, 295), y: clamp(p.y + j(), 5, 295), alive: true };
-    });
-    return out;
-  };
-  return { blue: jt('blue'), red: jt('red') };
-}
-
-// ─── SECTION 3: Role Weights & Power Calculation ──────────────────────────────
-//
-// Each player's general power is a weighted average of their 12 FM stats,
-// with weights tuned to their role's responsibilities.
-// Scale: 1–20 (matches the FM attribute scale).
-
-const ROLE_WEIGHTS = {
-  vanguard: {
-    mechanics:             3,   // execution in fights
-    teamfightPositioning:  4,   // staying alive + absorbing hits
-    composure:             3,   // not cracking under pressure
-    leadership:            3,   // rally effect on teammates
-    objectiveExecution:    2,   // warden / root timing
-    gameSense:             2,   // reading the map
-    communication:         3,   // shot-calling engage
+// Where each role walks during the laning phase
+const LANE_POS = {
+  blue: {
+    vanguard: { x:140, y:160 },
+    ranger:   { x: 90, y:195 },
+    arcanist: { x:155, y:155 },
+    hunter:   { x:150, y:200 },
+    warden:   { x:145, y:205 },
   },
-  ranger: {
-    mechanics:             3,   // gank execution
-    mapMovement:           4,   // pathing and vision
-    gameSense:             4,   // reading when to contest
-    objectiveExecution:    3,   // warden call timing
-    decisionMaking:        2,   // dive vs peel choices
-    csAccuracy:            2,   // jungle clear efficiency
-    adaptability:          2,   // responding to enemy jungle
-  },
-  arcanist: {
-    mechanics:             4,   // landing skill shots
-    decisionMaking:        4,   // ult timing, rotation choices
-    gameSense:             3,   // roaming reads
-    adaptability:          3,   // adjusting to lane opponent
-    csAccuracy:            2,   // wave management
-    composure:             2,   // not overcommitting
-    championPoolDepth:     2,   // flexibility vs counters
-  },
-  hunter: {
-    mechanics:             4,   // precision aim, kiting
-    csAccuracy:            4,   // farming under pressure
-    teamfightPositioning:  3,   // staying safe during fights
-    composure:             3,   // not tilting when behind
-    decisionMaking:        2,   // when to attack boss vs enemies
-    adaptability:          2,   // repositioning in chaos
-  },
-  warden: {
-    communication:         4,   // shot-calling, peel timing
-    teamfightPositioning:  3,   // staying in range of carry
-    leadership:            3,   // team morale effect
-    composure:             3,   // calm under boss fight pressure
-    objectiveExecution:    3,   // Poison Breath cleanse timing
-    gameSense:             2,   // vision control, rotations
-    adaptability:          2,   // adjusting to enemy engage
+  red: {
+    vanguard: { x:160, y:140 },
+    ranger:   { x:210, y:105 },
+    arcanist: { x:145, y:145 },
+    hunter:   { x:150, y:100 },
+    warden:   { x:155, y: 95 },
   },
 };
 
-// Contest-specific weights — what matters most for each type of in-game event.
-const CONTEST_WEIGHTS = {
-  skirmish: {
-    mechanics:       4,
-    mapMovement:     3,
-    gameSense:       3,
-    decisionMaking:  3,
-    composure:       2,
-  },
-  shrine: {
-    communication:        3,
-    gameSense:            3,
-    objectiveExecution:   3,
-    mapMovement:          2,
-    decisionMaking:       2,
-    teamfightPositioning: 2,
-  },
-  warden_timing: {
-    objectiveExecution:   4,
-    gameSense:            4,
-    communication:        3,
-    decisionMaking:       3,
-    mapMovement:          2,
-  },
-  warden_fight: {
-    mechanics:             4,
-    teamfightPositioning:  4,
-    composure:             3,
-    objectiveExecution:    3,
-    adaptability:          2,
-  },
-  teamfight: {
-    mechanics:             4,
-    teamfightPositioning:  4,
-    composure:             3,
-    decisionMaking:        2,
-    leadership:            1,
-    adaptability:          2,
-  },
-  root_siege: {
-    mechanics:             3,
-    objectiveExecution:    3,
-    decisionMaking:        2,
-    csAccuracy:            2,
-    gameSense:             2,
-  },
-  boss_tank: {
-    teamfightPositioning:  4,
-    composure:             4,
-    mechanics:             3,
-    leadership:            2,
-    adaptability:          2,
-  },
-  boss_cleanse: {
-    communication:         4,
-    objectiveExecution:    4,
-    gameSense:             3,
-    composure:             3,
-    decisionMaking:        2,
-  },
-  boss_dps: {
-    mechanics:             4,
-    csAccuracy:            3,
-    composure:             3,
-    adaptability:          3,
-    teamfightPositioning:  2,
-  },
-};
+// Objectives
+const OBJ_DEFS = [
+  { id:'b_outer',   side:'blue',    type:'root',    x: 95, y:205, maxHp: 4000, atkDmg: 8, atkRange:32 },
+  { id:'b_inner',   side:'blue',    type:'root',    x: 65, y:235, maxHp: 5500, atkDmg:12, atkRange:32 },
+  { id:'b_heart',   side:'blue',    type:'root',    x: 40, y:258, maxHp: 7000, atkDmg:18, atkRange:32 },
+  { id:'b_ancient', side:'blue',    type:'ancient', x: 22, y:278, maxHp:12000, atkDmg:25, atkRange:36 },
+  { id:'r_outer',   side:'red',     type:'root',    x:205, y: 95, maxHp: 4000, atkDmg: 8, atkRange:32 },
+  { id:'r_inner',   side:'red',     type:'root',    x:235, y: 65, maxHp: 5500, atkDmg:12, atkRange:32 },
+  { id:'r_heart',   side:'red',     type:'root',    x:258, y: 40, maxHp: 7000, atkDmg:18, atkRange:32 },
+  { id:'r_ancient', side:'red',     type:'ancient', x:278, y: 22, maxHp:12000, atkDmg:25, atkRange:36 },
+  { id:'shrine_a',  side:'neutral', type:'shrine',  x:120, y:130, maxHp: 2000, atkDmg: 0, atkRange: 0 },
+  { id:'shrine_b',  side:'neutral', type:'shrine',  x:180, y:170, maxHp: 2000, atkDmg: 0, atkRange: 0 },
+  { id:'warden_b',  side:'neutral', type:'warden',  x: 72, y:162, maxHp: 5000, atkDmg: 6, atkRange:28 },
+  { id:'warden_r',  side:'neutral', type:'warden',  x:228, y:138, maxHp: 5000, atkDmg: 6, atkRange:28 },
+];
 
-// Morale modifier: morale 1–10, neutral at 7. Range: -1.5 to +0.75 power points.
-// Low morale makes players underperform; high morale gives a small edge.
-function moraleMod(player) {
-  if (!player || player.morale === undefined) return 0;
-  return (player.morale - 7) * 0.25;
-}
+// Jungle camps
+const JUNGLE_DEF = [
+  { id:'bjc1', side:'blue', large:false, x:102, y:218, maxHp:400, xp:XP_JG_SM, gold:30, respawn:20 },
+  { id:'bjc2', side:'blue', large:false, x: 68, y:188, maxHp:400, xp:XP_JG_SM, gold:30, respawn:20 },
+  { id:'bjcL', side:'blue', large:true,  x: 82, y:202, maxHp:700, xp:XP_JG_LG, gold:60, respawn:30 },
+  { id:'rjc1', side:'red',  large:false, x:198, y: 82, maxHp:400, xp:XP_JG_SM, gold:30, respawn:20 },
+  { id:'rjc2', side:'red',  large:false, x:232, y:112, maxHp:400, xp:XP_JG_SM, gold:30, respawn:20 },
+  { id:'rjcL', side:'red',  large:true,  x:218, y: 98, maxHp:700, xp:XP_JG_LG, gold:60, respawn:30 },
+];
 
-function calcContestPower(player, contestType) {
-  if (!player || !player.stats) return 10;
-  var weights = CONTEST_WEIGHTS[contestType];
-  if (!weights) return calcRolePower(player);
-  var stats = player.stats;
-  var total = 0, totalWeight = 0;
-  Object.entries(weights).forEach(function(entry) {
-    var stat = entry[0], w = entry[1];
-    total += (stats[stat] || 10) * w;
-    totalWeight += w;
-  });
-  return total / totalWeight + moraleMod(player);
-}
+// ─── Agent initialisation ─────────────────────────────────────────────────────
 
-function calcRolePower(player) {
-  if (!player || !player.stats) return 10;
-  var weights = ROLE_WEIGHTS[player.position] || ROLE_WEIGHTS.arcanist;
-  var stats = player.stats;
-  var total = 0, totalWeight = 0;
-  Object.entries(weights).forEach(function(entry) {
-    var stat = entry[0], w = entry[1];
-    total += (stats[stat] || 10) * w;
-    totalWeight += w;
-  });
-  return total / totalWeight + moraleMod(player);
-}
+function initAgent(side, posIdx, player, champName) {
+  const pos    = POSITIONS[posIdx];
+  const cd     = CHAMPIONS[champName] || {};
+  const cls    = (cd.class || 'Mage').toLowerCase();
+  const ranges = CLASS_RANGES[cls] || CLASS_RANGES.mage;
+  const sp     = SPAWN[side];
+  const off    = [-12, -6, 0, 6, 12];
+  const ox     = off[posIdx] * (side === 'blue' ?  0.5 : -0.5);
+  const oy     = off[posIdx] * (side === 'blue' ? -0.5 :  0.5);
 
-function teamContestPower(team, contestType, bonus) {
-  bonus = bonus || 0;
-  return team.reduce(function(sum, pl) {
-    return sum + calcContestPower(pl, contestType);
-  }, 0) + bonus;
-}
-
-function resolveContest(bluePow, redPow, scaleFactor) {
-  scaleFactor = scaleFactor || 1.8;
-  var diff = (bluePow - redPow) * scaleFactor;
-  var blueWinPct = clamp(50 + diff, 10, 90);
   return {
-    blueWins:    chance(blueWinPct),
-    blueWinPct:  blueWinPct,
-    margin:      Math.abs(bluePow - redPow),
+    id: `${side[0]}${posIdx}`,
+    side, pos,
+    champName,
+    champData:  cd,
+    playerRef:  player,
+    cls,
+
+    x: sp.x + ox,
+    y: sp.y + oy,
+
+    level: 1, xp: 0,
+    gold: 500,
+
+    maxHp: cd.baseHp || 420,
+    hp:    cd.baseHp || 420,
+
+    physDmg:      cd.baseDmg    || 30,
+    abilityPower: 0,
+    physResist:   cd.physResist || 30,
+    magicResist:  cd.magicResist|| 35,
+    moveSpeed:    cd.moveSpeed  || 300,
+    atkRange:     ranges.atk,
+    aggroRange:   ranges.aggro,
+    vamp: 0, spellVamp: 0, magicPen: 0, physPen: 0, cdr: 0,
+
+    items: [],
+
+    isDead:      false,
+    respawnAt:   0,
+    recallStart: -1,
+
+    cdAA: 0, cdQ: 0, cdE: 0, cdUlt: 0,
+
+    state:  'laning',
+    target: null,
+
+    kills: 0, deaths: 0, assists: 0, cs: 0, damageDealt: 0,
+    recentDmgFrom: [],
   };
 }
 
-// ─── SECTION 4: Playstyle Modifiers ───────────────────────────────────────────
+// ─── Level-up ─────────────────────────────────────────────────────────────────
 
-var PLAYSTYLE_MODS = {
-  engage: {
-    bonus:   { warden_timing: 3, warden_fight: 3, teamfight: 2 },
-    penalty: { root_siege: 1, boss_dps: 1 },
-    desc: 'Aggressive early Warden contests and team fight initiation.',
-  },
-  poke: {
-    bonus:   { root_siege: 3, shrine: 2, boss_dps: 1 },
-    penalty: { warden_fight: 1, teamfight: 1 },
-    desc: 'Systematic Root pressure and safe shrine trades.',
-  },
-  pick: {
-    bonus:   { skirmish: 4, shrine: 2 },
-    penalty: { teamfight: 2, warden_fight: 1 },
-    desc: 'Isolating targets before objectives force the team fight.',
-  },
-  protect: {
-    bonus:   { boss_cleanse: 3, boss_tank: 2, boss_dps: 2, teamfight: 1 },
-    penalty: { skirmish: 2, warden_timing: 1 },
-    desc: 'Boss fight execution and carry protection.',
-  },
-  splitpush: {
-    bonus:   { root_siege: 4, skirmish: 2 },
-    penalty: { warden_timing: 2, teamfight: 1 },
-    desc: 'Side-lane Root pressure; weak in full 5v5 contests.',
-  },
-  scaling: {
-    bonus:   { boss_dps: 3, boss_tank: 2, teamfight: 2 },
-    penalty: { shrine: 2, warden_timing: 3 },
-    desc: 'Dominant late game; gives up early objectives intentionally.',
-  },
-};
-
-function getPlaystyleMod(playstyle, contestType) {
-  var mods = PLAYSTYLE_MODS[playstyle];
-  if (!mods) return 0;
-  return (mods.bonus && mods.bonus[contestType] || 0) - (mods.penalty && mods.penalty[contestType] || 0);
+function grantXP(agent, amount) {
+  agent.xp += amount;
+  while (agent.level < 10 && agent.xp >= XP_THRESH[agent.level]) {
+    agent.level++;
+    const L  = agent.level;
+    const cd = agent.champData;
+    const newMax = Math.round((cd.baseHp || 420) * (1 + (L - 1) * 0.07));
+    agent.hp      = Math.min(newMax, agent.hp + (newMax - agent.maxHp));
+    agent.maxHp   = newMax;
+    agent.physDmg    = (cd.baseDmg    || 30) + (L-1)*3;
+    agent.physResist = (cd.physResist || 30) + (L-1)*3;
+    agent.magicResist= (cd.magicResist|| 35) + (L-1)*2;
+    // Re-add item bonuses
+    agent.items.forEach(id => {
+      const s = ITEM_MAP[id]?.stats;
+      if (!s) return;
+      if (s.physDmg)    agent.physDmg     += s.physDmg;
+      if (s.physResist) agent.physResist  += s.physResist;
+      if (s.magicResist)agent.magicResist += s.magicResist;
+    });
+  }
 }
 
-// ─── SECTION 4B: Comp Synergy Contest Bonuses ────────────────────────────────
-//
-// When a team's draft triggers a COMP_SYNERGY (3+ champions of same compType),
-// they receive a flat power bonus on the contest types that synergy favours.
-// This makes the draft → power link explicit and visible in the narrative.
+// ─── Items ────────────────────────────────────────────────────────────────────
 
-var COMP_SYNERGY_CONTEST_BONUS = {
-  ENGAGE:    { teamfight: 4, warden_fight: 4, warden_timing: 2 },
-  POKE:      { root_siege: 4, shrine: 3 },
-  ASSASSIN:  { skirmish: 5, shrine: 2 },
-  PROTECT:   { boss_tank: 4, boss_cleanse: 4, boss_dps: 3 },
-  SPLITPUSH: { root_siege: 5, skirmish: 3 },
-  SCALING:   { boss_dps: 4, teamfight: 3, boss_tank: 2 },
-};
+function buyItems(agent) {
+  const role = (agent.champData?.class || 'mage').toLowerCase();
+  const eligible = getItemsForRole(role)
+    .filter(it => !agent.items.includes(it.id))
+    .sort((a,b) => b.cost - a.cost);
 
-/**
- * Return the flat contest power bonus granted by a team's active comp synergy.
- * @param {Array}  picks       — draft picks array ({ champion, pos, player })
- * @param {string} contestType
- */
-function getCompSynergyBonus(picks, contestType) {
-  if (!picks) return 0;
-  var type = getCompType(picks.map(function(p) { return { champion: p.champion }; }));
-  if (!type) return 0;
-  var table = COMP_SYNERGY_CONTEST_BONUS[type];
-  return (table && table[contestType]) || 0;
+  while (agent.items.length < 3) {
+    const best = eligible.find(it => it.cost <= agent.gold);
+    if (!best) break;
+    agent.items.push(best.id);
+    agent.gold -= best.cost;
+    eligible.splice(eligible.indexOf(best), 1);
+    const s = best.stats;
+    if (s.maxHp)           { agent.maxHp += s.maxHp; agent.hp = Math.min(agent.maxHp, agent.hp + s.maxHp); }
+    if (s.physResist)       agent.physResist    += s.physResist;
+    if (s.magicResist)      agent.magicResist   += s.magicResist;
+    if (s.abilityPower)     agent.abilityPower  += s.abilityPower;
+    if (s.physDmg)          agent.physDmg       += s.physDmg;
+    if (s.vamp)             agent.vamp          += s.vamp;
+    if (s.spellVamp)        agent.spellVamp     += s.spellVamp;
+    if (s.moveSpeed)        agent.moveSpeed     += s.moveSpeed;
+    if (s.magicPen)         agent.magicPen      += s.magicPen;
+    if (s.physPen)          agent.physPen       += s.physPen;
+    if (s.cooldownReduction)agent.cdr           += s.cooldownReduction;
+  }
 }
 
-// ─── SECTION 5: Narrative Helpers ─────────────────────────────────────────────
+// ─── Damage ───────────────────────────────────────────────────────────────────
 
-var DOMINANT_WIN = ['decisively', 'convincingly', 'in commanding fashion', 'with clinical precision'];
-var CLOSE_WIN    = ['narrowly', 'by the skin of their teeth', 'in a tense finish', 'after an agonizing fight'];
-var SHRINE_NAMES = ['North Ley Shrine', 'South Ley Shrine', 'Crossing Ley Shrine'];
-var POS_IDX      = { vanguard:0, ranger:1, arcanist:2, hunter:3, warden:4 };
+function dealDamage(attacker, target, rawDmg, dmgType, tick) {
+  const mechFactor = 0.85 + (attacker.playerRef?.stats?.mechanics || 10) / 20 * 0.30;
+  const resist = dmgType === 'magic'
+    ? Math.max(0, target.magicResist - attacker.magicPen)
+    : Math.max(0, target.physResist  - attacker.physPen);
+  const dmg = Math.max(1, Math.round(rawDmg * (100 / (100 + resist)) * mechFactor));
 
-// First-blood entrance lines (ranger perspective)
-var FB_ENTRY_DOMINANT = [
-  ' reads the ward gap and burns a path through the northern brush — ',
-  ' has been tracking this gank for two minutes and finally springs the trap — ',
-  ' bursts out of the northern jungle with zero warning — ',
-  ' cuts off every escape route before the target even realises the danger — ',
-];
-var FB_ENTRY_CLOSE = [
-  ' forces a contested duel in the early jungle — ',
-  ' trades blow-for-blow before landing the decisive hit — ',
-  ' finds a marginal opening and barely converts it — ',
-  ' and the victim both commit — only one walks away — ',
-];
+  target.hp          -= dmg;
+  attacker.damageDealt += dmg;
 
-// Shrine coordination lines (warden/support perspective)
-var SHRINE_CALL_GOOD = [
-  ' coordinates a textbook rotation — the enemy has no answer.',
-  '\'s callout cuts through the noise; the whole squad arrives in sync.',
-  ' reads the shrine cooldown to the second and calls the move.',
-  ' controls the vision around the shrine and dictates the terms of engagement.',
-];
-var SHRINE_CALL_CLOSE = [
-  ' — a chaotic scramble, but the team holds the point.',
-  ' — contested and bloody; the shrine changes hands only after the dust settles.',
-  ' — neither team wants to commit, but ultimately one blinks first.',
-  ' — both sides arrive at the same moment; the better team-fight composure wins out.',
-];
+  const vampRate = dmgType === 'magic' ? attacker.spellVamp : attacker.vamp;
+  if (vampRate > 0)
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(dmg * vampRate));
 
-// Team-fight opening lines (arcanist perspective)
-var TF_OPEN_GOOD = [
-  ' opens with a perfect $ — the enemy formation shatters.',
-  ' fires $ into a cluster of three — there is no coherent reply.',
-  ' lands $ and the fight is effectively over before it begins.',
-  ' uses $ at exactly the right moment; the enemy has used their defensive tools already.',
-];
-var TF_OPEN_CLOSE = [
-  ' unleashes $, but the enemy response is immediate — both teams grind it out.',
-  ' commits $ and the team follows — a bloody exchange.',
-  ' opens the dance with $; the counter-engage is fierce.',
-  ' activates $ and the teamfight descends into chaos.',
-];
+  target.recentDmgFrom = target.recentDmgFrom.filter(e => tick - e.tick <= 20);
+  if (!target.recentDmgFrom.find(e => e.id === attacker.id))
+    target.recentDmgFrom.push({ id: attacker.id, tick });
 
-// Stat-flavour descriptors: returns a short phrase based on stat value
-function statFlair(statVal, highPhrases, lowPhrases) {
-  return statVal >= 15 ? pick(highPhrases) : pick(lowPhrases);
+  return dmg;
 }
 
-var COMPOSURE_HIGH = ['calm as stone', 'ice-cold under pressure', 'utterly composed', 'unshakeable'];
-var COMPOSURE_LOW  = ['visibly rattled', 'shaky under the pressure', 'struggling to hold it together', 'cracking at the edges'];
-var COMM_HIGH      = ['calling every step', 'with surgical callouts', 'orchestrating the team perfectly', 'in total command of the comms'];
-var COMM_LOW       = ['comms breaking down', 'with the team slightly out of sync', 'a beat slow on the callout', 'without a clean enough call'];
-var SENSE_HIGH     = ['reading the map like a book', 'anticipating every enemy rotation', 'three steps ahead', 'with perfect vision control'];
-var SENSE_LOW      = ['flying blind', 'caught unaware by the rotation', 'without enough map information', 'reacting rather than reading'];
-
-// Build a teamfight opening line from template, replacing $ with the ult name
-function tfOpenLine(side, winMargin) {
-  var ultStr = ultName(side, 'arcanist');
-  var templates = winMargin > 2 ? TF_OPEN_GOOD : TF_OPEN_CLOSE;
-  return tagline(side,'arcanist') + pick(templates).replace('$', ultStr);
+function dealObjDamage(attacker, obj, rawDmg) {
+  const dmg = Math.max(1, Math.round(rawDmg * STR_DMG_REDUCE));
+  obj.hp = Math.max(0, obj.hp - dmg);
+  attacker.damageDealt += dmg;
+  return dmg;
 }
 
-// ─── SECTION 6: Draft System (Phase 5A + 5B) ─────────────────────────────────
+// ─── AI ───────────────────────────────────────────────────────────────────────
 
-var ROLE_CLASS_PRIORITY = {
-  vanguard:  ['Tank', 'Fighter'],
-  ranger:    ['Assassin', 'Fighter'],
-  arcanist:  ['Mage', 'Assassin'],
-  hunter:    ['Marksman'],
-  warden:    ['Sentinel'],
-};
+function decideAction(agent, allies, enemies, objs, jungles, tick, phase) {
+  if (agent.isDead || agent.state === 'dead') return;
+  if (agent.state === 'recalling') return;
 
-// When opponent is building this compType, prefer picking these compTypes to counter
-var COMP_COUNTERS = {
-  ENGAGE:    ['POKE', 'SCALING'],    // poke kites; scaling survives and scales past engagers
-  POKE:      ['ENGAGE', 'ASSASSIN'], // all-in over poke; assassins dive the backline
-  ASSASSIN:  ['ENGAGE', 'PROTECT'],  // engage lockdown stops picks; protect shields carry
-  PROTECT:   ['SPLITPUSH', 'POKE'],  // can't protect a split lane; poke through shields
-  SPLITPUSH: ['ENGAGE', 'SCALING'],  // win teamfight while they split
-  SCALING:   ['ASSASSIN', 'ENGAGE'], // kill the scaling carry early before they come online
-};
+  const composure = agent.playerRef?.stats?.composure || 10;
+  const gameSense = agent.playerRef?.stats?.gameSense  || 10;
+  const fleeHP    = 0.12 + (1 - composure / 20) * 0.18;
 
-// Each class is weak against these classes in direct matchups (countered_by perspective)
-var COUNTERED_BY = {
-  Tank:      ['Marksman'],           // sustained ranged DPS melts tanks
-  Fighter:   ['Mage'],               // kite and burst shuts down brawlers
-  Mage:      ['Assassin'],           // burst before mages can cast
-  Marksman:  ['Assassin', 'Tank'],   // burst before they act; tanks wall them off
-  Assassin:  ['Tank', 'Sentinel'],   // tanks absorb burst; sentinels shield the target
-  Sentinel:  ['Assassin', 'Mage'],   // hard to sustain through pure burst/poke
-};
+  // 1. Critical HP → recall
+  if (agent.hp / agent.maxHp < 0.08) {
+    agent.state = 'recalling';
+    agent.recallStart = tick;
+    agent.target = { type:'position', x: SPAWN[agent.side].x, y: SPAWN[agent.side].y };
+    return;
+  }
 
-// Score a champion for ban consideration: how threatening is it on the enemy team?
-function champBanValue(champName, player) {
-  if (!player || !CHAMPIONS[champName]) return 0;
-  var champ   = CHAMPIONS[champName];
-  var pos     = player.position;
-  var prefs   = ROLE_CLASS_PRIORITY[pos] || [];
-  var base    = calcRolePower(player);
-  var roleFit = (champ.role === pos) ? 1.6
-              : (prefs.indexOf(champ.class) !== -1) ? 1.3 : 0.8;
-  return base * roleFit;
+  // 2. Low HP → retreat
+  if (agent.hp / agent.maxHp < fleeHP && agent.state !== 'retreating') {
+    agent.state  = 'retreating';
+    agent.target = { type:'position', x: SPAWN[agent.side].x, y: SPAWN[agent.side].y };
+    return;
+  }
+
+  // 3. Retreating but recovered
+  if (agent.state === 'retreating' && agent.hp / agent.maxHp > 0.60) {
+    agent.state  = 'laning';
+    agent.target = null;
+  }
+
+  // 4. Enemy in aggro range → fight
+  const nearEnemy = findNearest(agent, enemies.filter(e => !e.isDead), agent.aggroRange);
+  if (nearEnemy) {
+    agent.state  = 'fighting';
+    agent.target = { type:'champion', ref: nearEnemy };
+    return;
+  }
+
+  // Clear stale fight target
+  if (agent.state === 'fighting' && (!agent.target?.ref || agent.target.ref.isDead)) {
+    agent.state  = 'laning';
+    agent.target = null;
+  }
+
+  const enemySide = agent.side === 'blue' ? 'red' : 'blue';
+
+  // 5. Ranger: jungle or gank
+  if (agent.pos === 'ranger') {
+    if (gameSense > 12) {
+      const gankTarget = enemies.find(e => !e.isDead && e.hp/e.maxHp < 0.55 && dist(agent,e) < 100);
+      if (gankTarget) {
+        agent.state  = 'fighting';
+        agent.target = { type:'champion', ref: gankTarget };
+        return;
+      }
+    }
+    const camp = jungles.filter(j => j.alive && j.side === agent.side)
+                        .sort((a,b) => dist(agent,a) - dist(agent,b))[0];
+    if (camp) {
+      agent.state  = 'jungling';
+      agent.target = { type:'jungle', ref: camp };
+      return;
+    }
+  }
+
+  // 6. Late-game push toward enemy objectives
+  if (phase >= 2 && gameSense > 7) {
+    const seq = enemySide === 'red'
+      ? ['r_outer','r_inner','r_heart','r_ancient']
+      : ['b_outer','b_inner','b_heart','b_ancient'];
+    const nextObj = objs.find(o => seq.includes(o.id) && !o.destroyed);
+    if (nextObj && dist(agent, nextObj) < 140) {
+      agent.state  = 'contesting';
+      agent.target = { type:'objective', ref: nextObj };
+      return;
+    }
+  }
+
+  // 7. Shrine contestation (mid-game)
+  if (phase >= 1 && gameSense > 9) {
+    const shrine = objs.find(o => o.type === 'shrine' && !o.tempDown && dist(agent, o) < 80);
+    if (shrine) {
+      agent.state  = 'contesting';
+      agent.target = { type:'objective', ref: shrine };
+      return;
+    }
+  }
+
+  // 8. Warden opportunity
+  if (agent.hp / agent.maxHp > 0.50) {
+    const myWarden = objs.find(o => o.type === 'warden' && !o.tempDown && dist(agent, o) < 45);
+    if (myWarden) {
+      agent.state  = 'contesting';
+      agent.target = { type:'warden', ref: myWarden };
+      return;
+    }
+  }
+
+  // 9. Default: walk toward assigned position (shifts in late-game toward enemy)
+  const lt = laneTarget(agent.side, agent.pos, phase, enemySide, objs);
+  agent.state  = 'laning';
+  agent.target = { type:'position', x: lt.x, y: lt.y };
 }
 
-// Return top numBans champion names from targetTeam's pools (ranked by threat)
-function generateBans(targetTeam, numBans) {
-  var candidates = [];
-  targetTeam.forEach(function(player) {
-    if (!player) return;
-    (player.champions || []).forEach(function(champName) {
-      candidates.push({ champion: champName, score: champBanValue(champName, player) });
+function laneTarget(side, pos, phase, enemySide, objs) {
+  if (phase >= 2) {
+    const seq = enemySide === 'red'
+      ? ['r_outer','r_inner','r_heart','r_ancient']
+      : ['b_outer','b_inner','b_heart','b_ancient'];
+    const next = objs.find(o => seq.includes(o.id) && !o.destroyed);
+    if (next) return { x: next.x, y: next.y };
+  }
+  return LANE_POS[side][pos];
+}
+
+// ─── Movement ─────────────────────────────────────────────────────────────────
+
+function moveAgent(agent) {
+  if (agent.isDead || !agent.target) return;
+  const t = agent.target;
+  let tx, ty;
+  if (t.ref) {
+    if (t.type === 'champion' && t.ref.isDead) { agent.target = null; return; }
+    tx = t.ref.x; ty = t.ref.y;
+  } else { tx = t.x || 150; ty = t.y || 150; }
+
+  const dx = tx - agent.x, dy = ty - agent.y;
+  const d  = Math.sqrt(dx*dx + dy*dy);
+  if (d < 2) return;
+
+  const speed = agent.moveSpeed * TICK_S / MOVE_SCALE;
+  const step  = Math.min(d, speed);
+  agent.x += (dx/d) * step;
+  agent.y += (dy/d) * step;
+}
+
+// ─── Combat ───────────────────────────────────────────────────────────────────
+
+function doCombat(agent, enemies, objs, jungles, tick) {
+  if (agent.isDead || agent.state === 'retreating' || agent.state === 'recalling') return;
+
+  // ── vs Champion ────────────────────────────────────────────────────────
+  if (agent.state === 'fighting' && agent.target?.type === 'champion') {
+    const enemy = agent.target.ref;
+    if (!enemy || enemy.isDead) { agent.state='laning'; agent.target=null; return; }
+    if (dist(agent, enemy) > agent.atkRange) return;
+
+    const aa = agent.champData?.abilities?.aa;
+    if (agent.cdAA <= 0) {
+      const dmg = aa ? aa.dmg : agent.physDmg;
+      const tp  = aa?.dmgType || 'physical';
+      dealDamage(agent, enemy, dmg, tp, tick);
+      agent.cdAA = Math.ceil((aa?.cd || 2.0) * (1 - agent.cdr) / TICK_S);
+    }
+    if (agent.cdQ <= 0 && agent.level >= 1) {
+      const q = agent.champData?.abilities?.q;
+      if (q && dist(agent, enemy) <= (q.range/18 || agent.atkRange + 10)) {
+        dealDamage(agent, enemy, q.dmg + (q.apRatio||0)*agent.abilityPower, q.dmgType||'magic', tick);
+        agent.cdQ = Math.ceil(q.cd * (1-agent.cdr) / TICK_S);
+      }
+    }
+    if (agent.cdE <= 0 && agent.level >= 3) {
+      const e = agent.champData?.abilities?.e;
+      if (e && dist(agent, enemy) <= (e.range/18 || agent.atkRange + 8)) {
+        dealDamage(agent, enemy, e.dmg + (e.apRatio||0)*agent.abilityPower, e.dmgType||'magic', tick);
+        agent.cdE = Math.ceil(e.cd * (1-agent.cdr) / TICK_S);
+      }
+    }
+    if (agent.cdUlt <= 0 && agent.level >= 6) {
+      const ult = agent.champData?.abilities?.ult;
+      if (ult) {
+        dealDamage(agent, enemy, ult.dmg + (ult.apRatio||0)*agent.abilityPower, ult.dmgType||'magic', tick);
+        agent.cdUlt = Math.ceil(ult.cd * (1-agent.cdr) / TICK_S);
+      }
+    }
+    return;
+  }
+
+  // ── vs Objective / Warden ──────────────────────────────────────────────
+  if (agent.state === 'contesting' && agent.target?.type === 'objective') {
+    const obj = agent.target.ref;
+    if (!obj || obj.destroyed || obj.tempDown) { agent.target=null; agent.state='laning'; return; }
+    if (dist(agent, obj) > agent.atkRange + 6) return;
+    if (agent.cdAA <= 0) {
+      const aa  = agent.champData?.abilities?.aa;
+      dealObjDamage(agent, obj, aa ? aa.dmg : agent.physDmg);
+      agent.cdAA = Math.ceil((aa?.cd||2.0)*(1-agent.cdr)/TICK_S);
+    }
+    if (agent.cdQ <= 0 && agent.level >= 1) {
+      const q = agent.champData?.abilities?.q;
+      if (q) {
+        dealObjDamage(agent, obj, (q.dmg + (q.apRatio||0)*agent.abilityPower) * 0.5);
+        agent.cdQ = Math.ceil(q.cd*(1-agent.cdr)/TICK_S);
+      }
+    }
+    return;
+  }
+
+  if (agent.state === 'contesting' && agent.target?.type === 'warden') {
+    const obj = agent.target.ref;
+    if (!obj || obj.tempDown) { agent.target=null; agent.state='laning'; return; }
+    if (dist(agent, obj) > agent.atkRange + 6) return;
+    if (agent.cdAA <= 0) {
+      dealObjDamage(agent, obj, agent.physDmg + agent.abilityPower * 0.5);
+      agent.cdAA = Math.ceil(((agent.champData?.abilities?.aa?.cd)||2.0)*(1-agent.cdr)/TICK_S);
+    }
+    return;
+  }
+
+  // ── Jungling ───────────────────────────────────────────────────────────
+  if (agent.state === 'jungling' && agent.target?.type === 'jungle') {
+    const camp = agent.target.ref;
+    if (!camp || !camp.alive) { agent.target=null; agent.state='laning'; return; }
+    if (dist(agent, camp) > 22) return;
+    if (agent.cdAA <= 0) {
+      camp.hp -= (agent.physDmg + agent.abilityPower * 0.3);
+      agent.cdAA = Math.ceil(((agent.champData?.abilities?.aa?.cd)||2.0)*(1-agent.cdr)/TICK_S);
+      if (camp.hp <= 0) {
+        camp.alive    = false;
+        camp.respawnAt = tick + camp.respawn;
+        camp.hp       = camp.maxHp;
+        agent.cs++;
+        agent.gold   += camp.gold;
+        grantXP(agent, camp.xp);
+      }
+    }
+  }
+}
+
+// ─── Objective counter-attack ─────────────────────────────────────────────────
+
+function objCounterAttack(objs, agents) {
+  objs.forEach(obj => {
+    if (obj.destroyed || obj.tempDown || obj.atkDmg <= 0 || obj.side === 'neutral') return;
+    agents.forEach(ag => {
+      if (ag.isDead || ag.side === obj.side) return;
+      if (dist(ag, obj) <= obj.atkRange) ag.hp -= obj.atkDmg;
     });
   });
-  candidates.sort(function(a, b) { return b.score - a.score; });
-  var seen = {}, bans = [];
-  candidates.forEach(function(c) {
-    if (!seen[c.champion] && bans.length < numBans) {
-      seen[c.champion] = true;
-      bans.push(c.champion);
+}
+
+// ─── Respawn & recall ─────────────────────────────────────────────────────────
+
+function processRespawns(agents, tick) {
+  agents.forEach(ag => {
+    if (!ag.isDead) return;
+    if (tick >= ag.respawnAt) {
+      ag.isDead = false;
+      ag.hp     = Math.round(ag.maxHp * 0.65);
+      ag.x      = SPAWN[ag.side].x + (Math.random()-0.5)*8;
+      ag.y      = SPAWN[ag.side].y + (Math.random()-0.5)*8;
+      ag.state  = 'laning';
+      ag.target = null;
+      buyItems(ag);
     }
   });
-  return bans;
 }
 
-// Get the leading comp type seen so far in a picks list (needs ≥ 2 to register)
-function getDominantCompType(picks) {
-  var counts = {};
-  picks.forEach(function(p) {
-    if (!p || p.champion === '???') return;
-    var ch = CHAMPIONS[p.champion];
-    if (!ch) return;
-    counts[ch.compType] = (counts[ch.compType] || 0) + 1;
+function processRecalls(agents, tick) {
+  agents.forEach(ag => {
+    if (ag.state !== 'recalling') return;
+    if (tick - ag.recallStart >= 5) {
+      ag.hp          = ag.maxHp;
+      ag.x           = SPAWN[ag.side].x + (Math.random()-0.5)*6;
+      ag.y           = SPAWN[ag.side].y + (Math.random()-0.5)*6;
+      ag.state       = 'laning';
+      ag.target      = null;
+      ag.recallStart = -1;
+      buyItems(ag);
+    }
   });
-  var best = null, bestCount = 1;
-  Object.keys(counts).forEach(function(k) {
-    if (counts[k] > bestCount) { best = k; bestCount = counts[k]; }
+}
+
+// ─── Kill resolution ──────────────────────────────────────────────────────────
+
+function resolveDeaths(agents, events, score, tick) {
+  agents.forEach(ag => {
+    if (ag.isDead || ag.hp > 0) return;
+    ag.isDead    = true;
+    ag.hp        = 0;
+    ag.deaths++;
+    ag.respawnAt = tick + Math.min(28, 8 + Math.floor(ag.level * 1.4));
+    ag.state     = 'dead';
+    ag.target    = null;
+
+    const killerPool = agents.filter(a => a.side !== ag.side && !a.isDead);
+    const killer     = killerPool[0] || null;
+
+    if (killer) {
+      killer.kills++;
+      killer.gold += 300;
+      grantXP(killer, XP_KILL);
+    }
+
+    const assisters = agents.filter(a =>
+      a.side !== ag.side && a !== killer && !a.isDead &&
+      ag.recentDmgFrom.some(e => e.id === a.id)
+    );
+    assisters.forEach(a => { a.assists++; a.gold += 150; grantXP(a, XP_ASSIST); });
+    ag.recentDmgFrom = [];
+
+    const killSide = ag.side === 'blue' ? 'red' : 'blue';
+    if (killSide === 'blue') score.blueKills++;
+    else                     score.redKills++;
+
+    events.push({
+      tick, side: killSide, time: fmtTime(tick), type: 'kill',
+      text: `${killer?.champName || '?'} eliminated ${ag.champName}!`,
+      blueKills: score.blueKills, redKills: score.redKills,
+      blueShrines: score.blueShrines, redShrines: score.redShrines,
+      blueRoots: score.blueRoots, redRoots: score.redRoots,
+      advAfter: advScore(score, agents),
+      positions: posMap(agents),
+      killBlue: killSide === 'blue',
+    });
   });
+}
+
+// ─── Objective resolution ─────────────────────────────────────────────────────
+
+function resolveObjectives(objs, agents, events, score, tick) {
+  objs.forEach(obj => {
+    if (obj.destroyed || obj.tempDown || obj.hp > 0) return;
+    obj.hp = 0;
+
+    const capSide = obj.side === 'blue' ? 'red' : obj.side === 'red' ? 'blue'
+      : (agents.filter(a => !a.isDead && dist(a,obj) < 80).sort((a,b) => dist(a,obj)-dist(b,obj))[0]?.side || 'blue');
+
+    const near = agents.filter(a => a.side === capSide && !a.isDead && dist(a,obj) < 80);
+    const xpR  = obj.type === 'warden' ? XP_WARDEN : XP_OBJ;
+    const gdR  = obj.type === 'shrine' ? 150 : obj.type === 'warden' ? 300 : 200;
+    near.forEach(a => { grantXP(a, xpR); a.gold += gdR; });
+
+    const baseEv = {
+      tick, side: capSide, time: fmtTime(tick), type: 'objective',
+      blueKills: score.blueKills, redKills: score.redKills,
+      blueShrines: score.blueShrines, redShrines: score.redShrines,
+      blueRoots: score.blueRoots, redRoots: score.redRoots,
+      positions: posMap(agents),
+    };
+
+    if (obj.type === 'shrine') {
+      if (capSide === 'blue') score.blueShrines++; else score.redShrines++;
+      obj.hp = obj.maxHp; obj.tempDown = true; obj.respawnAt = tick + 90;
+      events.push({ ...baseEv,
+        text: `${capSide === 'blue' ? 'BLUE' : 'RED'} seized a Ley Shrine!`,
+        advAfter: advScore(score, agents),
+        blueShrines: score.blueShrines, redShrines: score.redShrines,
+        shrineBlue: capSide==='blue', shrineRed: capSide==='red' });
+    } else if (obj.type === 'warden') {
+      score[capSide==='blue' ? 'blueWarden' : 'redWarden']++;
+      obj.hp = obj.maxHp; obj.tempDown = true; obj.respawnAt = tick + 120;
+      events.push({ ...baseEv,
+        text: `${capSide === 'blue' ? 'BLUE' : 'RED'} slew the Grove Warden!`,
+        advAfter: advScore(score, agents),
+        wardenBlue: capSide==='blue', wardenRed: capSide==='red' });
+    } else if (obj.type === 'root') {
+      obj.destroyed = true;
+      if (capSide === 'blue') score.blueRoots++; else score.redRoots++;
+      events.push({ ...baseEv,
+        text: `${capSide === 'blue' ? 'BLUE' : 'RED'} destroyed ${obj.side === 'blue' ? 'Blue' : 'Red'}'s Root tower!`,
+        advAfter: advScore(score, agents),
+        blueRoots: score.blueRoots, redRoots: score.redRoots,
+        towerBlue: capSide==='blue' });
+    } else if (obj.type === 'ancient') {
+      obj.destroyed  = true;
+      score.winner   = capSide;
+    }
+  });
+}
+
+// ─── Per-tick systems ─────────────────────────────────────────────────────────
+
+function tickCDs(agents) {
+  agents.forEach(ag => {
+    if (ag.cdAA  > 0) ag.cdAA--;
+    if (ag.cdQ   > 0) ag.cdQ--;
+    if (ag.cdE   > 0) ag.cdE--;
+    if (ag.cdUlt > 0) ag.cdUlt--;
+  });
+}
+
+function tickJungles(jungles, tick) {
+  jungles.forEach(c => {
+    if (!c.alive && tick >= (c.respawnAt || 0)) { c.alive = true; c.hp = c.maxHp; }
+  });
+}
+
+function tickObjRespawns(objs, tick) {
+  objs.forEach(o => { if (o.tempDown && tick >= o.respawnAt) o.tempDown = false; });
+}
+
+function tickPassiveGold(agents) {
+  agents.forEach(ag => {
+    if (ag.isDead) return;
+    ag.gold += ag.pos === 'ranger' ? 40 : 44;
+    if (ag.state === 'laning' && ag.pos !== 'ranger') {
+      const rate = 0.28 + (ag.playerRef?.stats?.csAccuracy || 10) / 20 * 0.52;
+      if (Math.random() < rate) { ag.cs++; ag.gold += 21; grantXP(ag, XP_CS); }
+    }
+  });
+}
+
+function tickRegen(agents) {
+  agents.forEach(ag => {
+    if (ag.isDead || ag.state === 'fighting') return;
+    const r = ag.items.reduce((s,id) => s + (ITEM_MAP[id]?.stats?.hpRegen||0), 0.5);
+    if (r > 0) ag.hp = Math.min(ag.maxHp, ag.hp + r);
+  });
+}
+
+// ─── Snapshot & helpers ───────────────────────────────────────────────────────
+
+function buildSnapshot(tick, agents, objs, score) {
+  return {
+    tick,
+    positions: posMap(agents),
+    objectives: objs.map(o => ({
+      id: o.id, hp: Math.max(0, o.hp), maxHp: o.maxHp,
+      destroyed: !!o.destroyed, tempDown: !!o.tempDown,
+    })),
+    score: { ...score },
+  };
+}
+
+function posMap(agents) {
+  const m = { blue:{}, red:{} };
+  agents.forEach(ag => {
+    m[ag.side][ag.pos] = { x: Math.round(ag.x), y: Math.round(ag.y), alive: !ag.isDead };
+  });
+  return m;
+}
+
+function dist(a, b) {
+  const dx = a.x-b.x, dy = a.y-b.y;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+
+function findNearest(agent, pool, range) {
+  let best = null, bestD = range;
+  pool.forEach(p => { const d = dist(agent,p); if (d < bestD) { bestD=d; best=p; } });
   return best;
 }
 
-// Calculate net counter power advantage for blue (positive = blue has the edge)
-// Scaled by 0.25 so counters influence but don't override raw skill gap
-function getCounterScore(bluePicks, redPicks) {
-  var score = 0;
-  var redClasses  = redPicks.map(function(p) {
-    return p && CHAMPIONS[p.champion] ? CHAMPIONS[p.champion].class : null;
-  }).filter(Boolean);
-  var blueClasses = bluePicks.map(function(p) {
-    return p && CHAMPIONS[p.champion] ? CHAMPIONS[p.champion].class : null;
-  }).filter(Boolean);
-  // For each red champ countered by a blue class → +1.5 for blue
-  redClasses.forEach(function(rc) {
-    (COUNTERED_BY[rc] || []).forEach(function(counterClass) {
-      if (blueClasses.indexOf(counterClass) !== -1) score += 1.5;
-    });
-  });
-  // For each blue champ countered by a red class → -1.5 for blue
-  blueClasses.forEach(function(bc) {
-    (COUNTERED_BY[bc] || []).forEach(function(counterClass) {
-      if (redClasses.indexOf(counterClass) !== -1) score -= 1.5;
-    });
-  });
-  return score * 0.25; // scale: max ~±1.9 power offset
+function fmtTime(tick) {
+  const s = tick * TICK_S;
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }
 
-// Pick the best available champion for a player, counter-aware
-function pickChampion(player, pos, banned, allPicked, enemyPicks) {
-  if (!player) return '???';
-  var pool         = player.champions || [];
-  var priority     = ROLE_CLASS_PRIORITY[pos] || [];
-  var enemyDom     = getDominantCompType(enemyPicks);
-  var counterTypes = enemyDom ? (COMP_COUNTERS[enemyDom] || []) : [];
-
-  var available = pool.filter(function(c) {
-    return !banned[c] && !allPicked[c] && CHAMPIONS[c];
-  });
-  if (!available.length) return '???';
-
-  var scored = available.map(function(c) {
-    var champ = CHAMPIONS[c];
-    var w = 1;
-    if (priority.indexOf(champ.class) !== -1) w += 2; // role class fit
-    if (champ.role === pos) w += 1;                    // exact role match
-    if (counterTypes.indexOf(champ.compType) !== -1) w += 2; // counter-pick bonus
-    w += Math.random() * 0.5;                          // variance to avoid repetitive drafts
-    return { c: c, w: w };
-  });
-  scored.sort(function(a, b) { return b.w - a.w; });
-
-  // Weighted pick among top 3 to keep variety
-  var top   = scored.slice(0, Math.min(3, scored.length));
-  var total = top.reduce(function(s, x) { return s + x.w; }, 0);
-  var r     = Math.random() * total;
-  for (var i = 0; i < top.length; i++) {
-    r -= top[i].w;
-    if (r <= 0) return top[i].c;
-  }
-  return top[0].c;
+function advScore(score, agents) {
+  const bA = agents.filter(a=>a.side==='blue'&&!a.isDead).length;
+  const rA = agents.filter(a=>a.side==='red' &&!a.isDead).length;
+  const bs = score.blueKills*3 + score.blueShrines*4 + score.blueRoots*7 + bA;
+  const rs = score.redKills *3 + score.redShrines *4 + score.redRoots *7 + rA;
+  return Math.round(Math.min(84, Math.max(16, bs/(bs+rs||1)*100)));
 }
 
-function draftChampions(blueTeamArr, redTeamArr) {
-  // ── Phase 1: Bans (5 per side, each bans from opponent's pool) ──────────────
-  var blueBans = generateBans(redTeamArr,  5); // blue bans opponent (red) champs
-  var redBans  = generateBans(blueTeamArr, 5); // red bans opponent (blue) champs
-  var banned   = {};
-  blueBans.concat(redBans).forEach(function(c) { banned[c] = true; });
-
-  // ── Phase 2: Picks — interleaved by position, counter-aware ─────────────────
-  // Blue picks first at each slot, then red counter-picks with full knowledge.
-  var allPicked = {}, bluePicks = [], redPicks = [];
-
-  POSITIONS.forEach(function(pos, i) {
-    var bc = pickChampion(blueTeamArr[i], pos, banned, allPicked, redPicks);
-    if (bc !== '???') allPicked[bc] = true;
-    var bClass = bc !== '???' && CHAMPIONS[bc] ? CHAMPIONS[bc].class : null;
-    bluePicks.push({ pos: pos, player: blueTeamArr[i], champion: bc, champClass: bClass });
-
-    var rc = pickChampion(redTeamArr[i], pos, banned, allPicked, bluePicks);
-    if (rc !== '???') allPicked[rc] = true;
-    var rClass = rc !== '???' && CHAMPIONS[rc] ? CHAMPIONS[rc].class : null;
-    redPicks.push({ pos: pos, player: redTeamArr[i], champion: rc, champClass: rClass });
-  });
-
-  var synFor = function(picks) {
-    var type = getCompType(picks.map(function(p) { return { champion: p.champion }; }));
-    return type ? [COMP_SYNERGIES[type]] : [];
-  };
-
-  return {
-    blue:          bluePicks,
-    red:           redPicks,
-    bans:          { blue: blueBans, red: redBans },
-    blueSynergies: synFor(bluePicks),
-    redSynergies:  synFor(redPicks),
-    counterScore:  getCounterScore(bluePicks, redPicks),
-  };
+function totalGold(agents, side) {
+  return agents.filter(a=>a.side===side).reduce((s,a)=>s+a.gold,0);
 }
 
-// ─── SECTION 7: Quick Simulate ────────────────────────────────────────────────
+// Commentary lines
+const _COMMENTARY = [
+  'Both teams trading blows in the mid-lane.',
+  'The jungle is heating up — wards are down.',
+  'Vision control is being contested near the shrines.',
+  'Poke damage slowly whittles down the front-line.',
+  'Teams jockeying for Ley Shrine priority.',
+  'A beautiful engage caught them completely off guard.',
+  'Split-push pressure is mounting on the flanks.',
+  'Calculated positioning near the Ancient Roots.',
+  'The Grove Warden looms large over this contested zone.',
+  'The support is doing exceptional peel work.',
+];
+let _commIdx = 0;
 
-function quickSimulate(blueTeamArr, redTeamArr) {
-  var pow = function(arr) {
-    return arr.reduce(function(s, pl) { return s + (pl ? calcRolePower(pl) : 10); }, 0);
-  };
-  var diff = pow(blueTeamArr) - pow(redTeamArr);
-  return chance(clamp(50 + diff * 1.8, 12, 88)) ? 'blue' : 'red';
-}
+// ─── Main simulation entry point ──────────────────────────────────────────────
 
-// ─── SECTION 8: Match State & Event Helpers ───────────────────────────────────
+function simulateMatch(blueTeamArr, redTeamArr, blueName, redName, preDraft) {
+  _commIdx = 0;
+  const draft = preDraft || draftChampions(blueTeamArr, redTeamArr);
 
-var _ms = null; // live match state
-var _ev = null; // event list
+  // Init agents
+  const blueAgents = blueTeamArr.map((p, i) =>
+    initAgent('blue', i, p, draft.blue[i] || 'Wraithfern'));
+  const redAgents  = redTeamArr.map((p, i) =>
+    initAgent('red',  i, p, draft.red[i]  || 'Bombspore'));
+  const all = [...blueAgents, ...redAgents];
 
-// Kill probability by position — who is most likely to get the kill credit
-// hunter and arcanist are primary damage dealers; warden almost never takes kills
-var KILL_PROB  = [10, 20, 30, 35, 5];  // vanguard, ranger, arcanist, hunter, warden
-// Death probability — tanks and frontliners die more often, hunters sometimes
-var DEATH_PROB = [30, 20, 25, 15, 10]; // vanguard, ranger, arcanist, hunter, warden
+  all.forEach(ag => buyItems(ag));
 
-function weightedRolePick(probs) {
-  var total = probs.reduce(function(s, v) { return s + v; }, 0);
-  var r = Math.random() * total;
-  for (var i = 0; i < probs.length; i++) { r -= probs[i]; if (r <= 0) return i; }
-  return 0;
-}
+  // Init objectives and jungles
+  const objs    = OBJ_DEFS.map(d => ({ ...d, hp: d.maxHp, destroyed: false, tempDown: false, respawnAt: 0 }));
+  const jungles = JUNGLE_DEF.map(d => ({ ...d, hp: d.maxHp, alive: true, respawnAt: 0 }));
 
-function initPerf() {
-  return [0,1,2,3,4].map(function() { return { kills: 0, assists: 0, deaths: 0 }; });
-}
-
-// Attribute one kill: killerSide player gets kill, victimSide player gets death, teammates get assists
-function attributeKillEvent(killerSide, victimSide) {
-  var killerIdx = weightedRolePick(KILL_PROB);
-  var victimIdx = weightedRolePick(DEATH_PROB);
-  _ms[killerSide].perf[killerIdx].kills++;
-  _ms[victimSide].perf[victimIdx].deaths++;
-  for (var i = 0; i < 5; i++) {
-    if (i !== killerIdx) _ms[killerSide].perf[i].assists++;
-  }
-}
-
-function initMatchState(blueTeamArr, redTeamArr, blueName, redName, blueStyle, redStyle) {
-  _ev = [];
-  _ms = {
-    t: 0,
-    blueName:  blueName,
-    redName:   redName,
-    blueStyle: blueStyle,
-    redStyle:  redStyle,
-    blue: { players: blueTeamArr, kills: 0, shrines: 0, roots: 0, gold: 0, perf: initPerf() },
-    red:  { players: redTeamArr,  kills: 0, shrines: 0, roots: 0, gold: 0, perf: initPerf() },
-    adv:    50,
+  const score = {
+    blueKills:0, redKills:0,
+    blueShrines:0, redShrines:0,
+    blueRoots:0, redRoots:0,
+    blueWarden:0, redWarden:0,
     winner: null,
-    draft:  null,
-    // Gold lead snapshots for the chart: array of { t, lead } (positive = blue ahead)
-    goldSnapshots: [],
   };
-}
 
-// Advance gold simulation — called after each major event.
-// Gold flows from kills, cs, objectives; winner naturally accumulates faster.
-function tickGold() {
-  var W    = _ms.winner;
-  var t    = _ms.t;
-  // Base gold per minute: ~400/min per player, 5 players = 2000/min each team
-  var basePerMin = 2000;
-  var dt   = Math.max(0.5, t - (_ms._lastGoldTick || 0));
-  _ms._lastGoldTick = t;
+  const events = [], snapshots = [], goldSnapshots = [];
 
-  // Gold from cs (winner farms slightly better due to map pressure)
-  var bCs  = basePerMin * dt * (W === 'blue' ? 1.04 : 0.96);
-  var rCs  = basePerMin * dt * (W === 'red'  ? 1.04 : 0.96);
-  // Gold from kills (300 per kill)
-  var bKg  = _ms.blue.kills * 300;
-  var rKg  = _ms.red.kills  * 300;
-  // Gold from objectives
-  var bObj = (_ms.blue.shrines * 150) + (_ms.blue.roots * 250);
-  var rObj = (_ms.red.shrines  * 150) + (_ms.red.roots  * 250);
+  // ── Main game loop ────────────────────────────────────────────────────────
+  for (let tick = 0; tick <= MAX_TICKS && !score.winner; tick++) {
+    const phase = tick < 50 ? 0 : tick < 110 ? 1 : 2;
 
-  _ms.blue.gold = Math.round(bCs + bKg + bObj);
-  _ms.red.gold  = Math.round(rCs + rKg + rObj);
+    tickCDs(all);
+    processRespawns(all, tick);
+    processRecalls(all, tick);
+    tickJungles(jungles, tick);
+    tickObjRespawns(objs, tick);
+    tickPassiveGold(all);
+    tickRegen(all);
 
-  var lead = _ms.blue.gold - _ms.red.gold;
-  _ms.goldSnapshots.push({ t: Math.round(t * 10) / 10, lead: lead });
-}
+    // AI decisions
+    all.forEach(ag => {
+      if (ag.isDead) return;
+      decideAction(ag,
+        all.filter(a => a.side === ag.side && a !== ag),
+        all.filter(a => a.side !== ag.side),
+        objs, jungles, tick, phase);
+    });
 
-function getPlayer(side, pos) {
-  var idx = typeof pos === 'string' ? POS_IDX[pos] : pos;
-  return _ms[side].players[idx] || null;
-}
+    // Movement
+    all.forEach(ag => { if (!ag.isDead) moveAgent(ag); });
 
-function getChamp(side, pos) {
-  if (!_ms.draft) return '???';
-  var idx = typeof pos === 'string' ? POS_IDX[pos] : pos;
-  return (_ms.draft[side][idx] && _ms.draft[side][idx].champion) || '???';
-}
+    // Combat
+    all.forEach(ag => {
+      if (ag.isDead) return;
+      doCombat(ag, all.filter(a => a.side !== ag.side), objs, jungles, tick);
+    });
 
-function tagline(side, pos) {
-  var pl = getPlayer(side, pos);
-  var ch = getChamp(side, pos);
-  return pl ? (pl.name + ' (' + ch + ')') : ch;
-}
+    // Objective counter-attacks
+    objCounterAttack(objs, all);
 
-function ultName(side, pos) {
-  var ch = getChamp(side, pos);
-  var data = CHAMPIONS[ch];
-  if (!data || !data.ult) return 'their ultimate';
-  return data.ult.split('—')[0].trim();
-}
+    // Resolve deaths and captures
+    resolveDeaths(all, events, score, tick);
+    if (!score.winner) resolveObjectives(objs, all, events, score, tick);
 
-function getStat(side, pos, stat) {
-  var pl = getPlayer(side, pos);
-  return pl && pl.stats ? (pl.stats[stat] || 10) : 10;
-}
+    // Snapshots every 4 ticks
+    if (tick % 4 === 0)
+      snapshots.push(buildSnapshot(tick, all, objs, score));
 
-function pushEv(type, text, sceneName, opts) {
-  opts = opts || {};
-  tickGold();
-  var ev = {
-    type:        type,
-    time:        fmt(_ms.t),
-    text:        text,
-    positions:   sceneName ? scene(sceneName) : null,
-    blueKills:   _ms.blue.kills,
-    redKills:    _ms.red.kills,
-    blueShrines: _ms.blue.shrines,
-    redShrines:  _ms.red.shrines,
-    blueRoots:   _ms.blue.roots,
-    redRoots:    _ms.red.roots,
-    advAfter:    Math.round(_ms.adv),
-    blueGold:    _ms.blue.gold,
-    redGold:     _ms.red.gold,
-  };
-  Object.keys(opts).forEach(function(k) { ev[k] = opts[k]; });
-  _ev.push(ev);
-}
+    // Gold chart
+    goldSnapshots.push({ lead: totalGold(all,'blue') - totalGold(all,'red'), time: tick });
 
-function doKill(killerSide, text, sceneName, opts) {
-  _ms[killerSide].kills++;
-  var victimSide = killerSide === 'blue' ? 'red' : 'blue';
-  attributeKillEvent(killerSide, victimSide);
-  var swing = rand(1.5, 4.0);
-  _ms.adv = clamp(_ms.adv + (killerSide === 'blue' ? swing : -swing), 10, 90);
-  pushEv('kill', text, sceneName, Object.assign({ killBlue: killerSide === 'blue' }, opts || {}));
-}
+    // Commentary every 18 ticks
+    if (tick > 0 && tick % 18 === 0 && !score.winner) {
+      events.push({
+        tick, side: null, time: fmtTime(tick), type: 'commentary',
+        text: _COMMENTARY[_commIdx++ % _COMMENTARY.length],
+        blueKills:score.blueKills, redKills:score.redKills,
+        blueShrines:score.blueShrines, redShrines:score.redShrines,
+        blueRoots:score.blueRoots, redRoots:score.redRoots,
+        advAfter: advScore(score, all),
+        positions: posMap(all),
+      });
+    }
 
-function doShrine(side, shrineName, sceneName) {
-  _ms[side].shrines++;
-  var stacks    = _ms[side].shrines;
-  var buffNames = ['','Verdant Blessing','Quickened Roots','Ley Convergence'];
-  var buff      = buffNames[Math.min(stacks, 3)] || '';
-  var swing     = rand(2, 5);
-  _ms.adv = clamp(_ms.adv + (side === 'blue' ? swing : -swing), 10, 90);
-  var teamName = side === 'blue' ? _ms.blueName : _ms.redName;
-  pushEv('objective',
-    teamName + ' captures the ' + shrineName + '! ' +
-    'Verdant Blessings \xd7' + stacks + (buff ? ' \u2014 ' + buff + ' active' : '') + '.',
-    sceneName,
-    { shrineBlue: side === 'blue', shrineRed: side === 'red' }
-  );
-}
-
-function doRoot(side, label, sceneName) {
-  _ms[side].roots++;
-  var swing    = rand(3, 6);
-  _ms.adv = clamp(_ms.adv + (side === 'blue' ? swing : -swing), 10, 90);
-  var teamName = side === 'blue' ? _ms.blueName : _ms.redName;
-  pushEv('objective',
-    label + ' collapses under siege from ' + teamName + '! The lane is cracked open.',
-    sceneName,
-    { towerBlue: side === 'blue' }
-  );
-}
-
-function doTeamfight(winnerSide, bKills, rKills, text, sceneName) {
-  _ms.blue.kills += bKills;
-  _ms.red.kills  += rKills;
-  // Attribute kills: bKills = blue killed red players, rKills = red killed blue players
-  for (var i = 0; i < bKills; i++) attributeKillEvent('blue', 'red');
-  for (var j = 0; j < rKills; j++) attributeKillEvent('red', 'blue');
-  var swing = rand(3, 7);
-  _ms.adv = clamp(_ms.adv + (winnerSide === 'blue' ? swing : -swing), 10, 90);
-  pushEv('teamfight', text, sceneName, { tfBlueKills: bKills, tfRedKills: rKills });
-}
-
-function doCommentary(text, sceneName) {
-  pushEv('commentary', text, sceneName);
-}
-
-// ─── SECTION 9: Seedling Phase (0–10 min) ─────────────────────────────────────
-
-function runSeedling() {
-  var blueStyle = _ms.blueStyle, redStyle = _ms.redStyle;
-  var bPlayers  = _ms.blue.players, rPlayers = _ms.red.players;
-
-  // Opening commentary
-  _ms.t = rand(0.5, 1.2);
-  var bComp = _ms.draft && _ms.draft.blueSynergies[0] ? _ms.draft.blueSynergies[0].name : null;
-  var rComp = _ms.draft && _ms.draft.redSynergies[0]  ? _ms.draft.redSynergies[0].name  : null;
-  doCommentary(
-    'Both teams step into the Ancient Grove. ' +
-    _ms.blueName + (bComp ? ' field a ' + bComp : ' open with ' + (PLAYSTYLE_MODS[blueStyle] ? PLAYSTYLE_MODS[blueStyle].desc : 'a balanced approach')) + '. ' +
-    _ms.redName + (rComp ? ' answer with ' + rComp : ' take their positions.'),
-    'laning'
-  );
-
-  // ── First Blood ──────────────────────────────────────────────────────────────
-  // Rangers duel in the jungle; arcanist roam and ASSASSIN/PICK synergy contribute.
-  _ms.t = rand(3.0, 6.5);
-  var bDraft = _ms.draft ? _ms.draft.blue : [];
-  var rDraft = _ms.draft ? _ms.draft.red  : [];
-  var bRngr = calcContestPower(getPlayer('blue','ranger'),  'skirmish')
-    + getPlaystyleMod(blueStyle, 'skirmish') * 5
-    + getCompSynergyBonus(bDraft, 'skirmish');
-  var rRngr = calcContestPower(getPlayer('red', 'ranger'),  'skirmish')
-    + getPlaystyleMod(redStyle,  'skirmish') * 5
-    + getCompSynergyBonus(rDraft, 'skirmish');
-  var bArc  = calcContestPower(getPlayer('blue','arcanist'),'skirmish') * 0.4;
-  var rArc  = calcContestPower(getPlayer('red', 'arcanist'),'skirmish') * 0.4;
-  var fb    = resolveContest(bRngr + bArc, rRngr + rArc, 2.5);
-  var fbSide   = fb.blueWins ? 'blue' : 'red';
-  var fbVictim = fb.blueWins ? 'red'  : 'blue';
-  var victimPos = chance(55) ? 'ranger' : (chance(50) ? 'arcanist' : 'vanguard');
-  var entranceLine = tagline(fbSide,'ranger') + pick(fb.margin > 3 ? FB_ENTRY_DOMINANT : FB_ENTRY_CLOSE);
-  doKill(
-    fbSide,
-    'FIRST BLOOD! ' + entranceLine +
-    tagline(fbVictim, victimPos) + ' has nowhere to go. ' +
-    (fbSide === 'blue' ? _ms.blueName : _ms.redName) + ' draw first blood!',
-    'northShrine'
-  );
-
-  // ── North Shrine ─────────────────────────────────────────────────────────────
-  _ms.t = rand(5.5, 8.0);
-  var bNorth = teamContestPower(bPlayers, 'shrine', getPlaystyleMod(blueStyle, 'shrine') * 5
-    + getCompSynergyBonus(bDraft, 'shrine'));
-  var rNorth = teamContestPower(rPlayers, 'shrine', getPlaystyleMod(redStyle,  'shrine') * 5
-    + getCompSynergyBonus(rDraft, 'shrine'));
-  var northBonus   = fbSide === 'blue' ? rand(2, 5) : -rand(2, 5);
-  var northResult  = resolveContest(bNorth + northBonus, rNorth, 1.2);
-  var northSide    = northResult.blueWins ? 'blue' : 'red';
-  var northSupport = getPlayer(northSide, 'warden');
-  var northSuppComm = northSupport ? (northSupport.stats.communication || 10) : 10;
-  var northCallout  = northSuppComm >= 14
-    ? (northSupport ? northSupport.name : 'the support') + pick(SHRINE_CALL_GOOD)
-    : (northSide === 'blue' ? _ms.blueName : _ms.redName) + pick(SHRINE_CALL_CLOSE);
-  doShrine(northSide, SHRINE_NAMES[0], 'northShrine');
-  doCommentary(
-    'North Shrine: ' + northCallout + ' ' +
-    (northSide === 'blue' ? _ms.redName : _ms.blueName) + ' will need to respond on the south side.',
-    'northShrine'
-  );
-
-  // ── South Shrine ─────────────────────────────────────────────────────────────
-  _ms.t = rand(7.5, 9.5);
-  var southBonus  = northSide === 'blue' ? -rand(3, 7) : rand(3, 7);
-  var southResult = resolveContest(bNorth + southBonus, rNorth, 1.2);
-  var southSide   = southResult.blueWins ? 'blue' : 'red';
-  doShrine(southSide, SHRINE_NAMES[1], 'southShrine');
-  // Commentary if the same team took both shrines — or if they split
-  var bothShrines = northSide === southSide;
-  if (bothShrines) {
-    doCommentary(
-      (northSide === 'blue' ? _ms.blueName : _ms.redName) +
-      ' sweep both opening shrines — ' +
-      (northSide === 'blue' ? _ms.redName : _ms.blueName) +
-      ' will need a strong Warden contest to claw back into this.',
-      'southShrine'
-    );
-  }
-
-  // ── Optional early skirmish ───────────────────────────────────────────────────
-  if (chance(60)) {
-    _ms.t = rand(8.5, 9.8);
-    var skResult  = resolveContest(bRngr + bArc, rRngr + rArc, 2.0);
-    var skSide    = skResult.blueWins ? 'blue' : 'red';
-    var skVictim  = skSide === 'blue' ? 'red' : 'blue';
-    var skRngrGs  = getStat(skSide, 'ranger', 'gameSense');
-    var skFlair   = statFlair(skRngrGs, SENSE_HIGH, SENSE_LOW);
-    doKill(
-      skSide,
-      tagline(skSide,'ranger') + ' — ' + skFlair + ' — catches ' +
-      tagline(skVictim,'arcanist') + ' over-extended near the South Shrine. Solo kill.',
-      'southShrine'
-    );
-  }
-}
-
-// ─── SECTION 10: Growth Phase (10–20 min) ─────────────────────────────────────
-
-function runGrowth() {
-  var blueStyle = _ms.blueStyle, redStyle = _ms.redStyle;
-  var bPlayers  = _ms.blue.players, rPlayers = _ms.red.players;
-
-  // Phase header
-  _ms.t = 10.0 + rand(0.2, 0.8);
-  var bShrLead = _ms.blue.shrines - _ms.red.shrines;
-  var leadText = bShrLead > 0
-    ? _ms.blueName + ' hold a ' + _ms.blue.shrines + '-' + _ms.red.shrines + ' Shrine lead'
-    : bShrLead < 0
-    ? _ms.redName  + ' hold a ' + _ms.red.shrines  + '-' + _ms.blue.shrines + ' Shrine lead'
-    : 'Shrines are tied one apiece';
-  doCommentary(
-    '[Growth Phase] ' + leadText + ' as both rosters transition to the mid-game. ' +
-    'Ancient Roots are under pressure on all three lanes.',
-    'center'
-  );
-
-  var bDraft = _ms.draft ? _ms.draft.blue : [];
-  var rDraft = _ms.draft ? _ms.draft.red  : [];
-
-  // ── Outer Root falls ──────────────────────────────────────────────────────────
-  _ms.t = rand(10.5, 12.5);
-  var bSiege = teamContestPower(bPlayers, 'root_siege',
-    getPlaystyleMod(blueStyle, 'root_siege') * 5 + getCompSynergyBonus(bDraft, 'root_siege'));
-  var rSiege = teamContestPower(rPlayers, 'root_siege',
-    getPlaystyleMod(redStyle,  'root_siege') * 5 + getCompSynergyBonus(rDraft, 'root_siege'));
-  var siegeR  = resolveContest(bSiege, rSiege, 1.5);
-  var outerSide = siegeR.blueWins ? 'blue' : 'red';
-  var outerLanes = ['Top-Lane Outer Root', 'Bot-Lane Outer Root', 'Mid-Lane Outer Root'];
-  doRoot(outerSide, pick(outerLanes), outerSide === 'blue' ? 'northShrine' : 'southShrine');
-
-  // ── Grove Warden spawns ───────────────────────────────────────────────────────
-  _ms.t = rand(12.0, 13.0);
-  doCommentary(
-    'The Grove Warden stirs in the Grove Heart — both teams abandon their lanes and crash toward center.',
-    'center'
-  );
-
-  // Stage 1: Timing contest — who reads the Warden's HP and calls it first?
-  _ms.t += rand(0.5, 1.2);
-  var bWTime = teamContestPower(bPlayers, 'warden_timing',
-    getPlaystyleMod(blueStyle, 'warden_timing') * 5 + getCompSynergyBonus(bDraft, 'warden_timing'));
-  var rWTime = teamContestPower(rPlayers, 'warden_timing',
-    getPlaystyleMod(redStyle,  'warden_timing') * 5 + getCompSynergyBonus(rDraft, 'warden_timing'));
-  var timeR  = resolveContest(bWTime, rWTime, 1.4);
-  var timingSide = timeR.blueWins ? 'blue' : 'red';
-  // Commentary on which Ranger called the timing
-  var timingRngr = getPlayer(timingSide, 'ranger');
-  var timingGs   = timingRngr ? (timingRngr.stats.gameSense || 10) : 10;
-  doCommentary(
-    tagline(timingSide,'ranger') + ' — ' + statFlair(timingGs, SENSE_HIGH, SENSE_LOW) +
-    ' — calls the Warden at ' + fmt(_ms.t) + '. ' +
-    (timingSide === 'blue' ? _ms.blueName : _ms.redName) + ' collapse first!',
-    'center'
-  );
-
-  // Stage 2: Fight — who wins the chaotic 5v5 around the Warden?
-  _ms.t += rand(0.3, 0.7);
-  var bWFight = teamContestPower(bPlayers, 'warden_fight',
-    getPlaystyleMod(blueStyle, 'warden_fight') * 5 + getCompSynergyBonus(bDraft, 'warden_fight'));
-  var rWFight = teamContestPower(rPlayers, 'warden_fight',
-    getPlaystyleMod(redStyle,  'warden_fight') * 5 + getCompSynergyBonus(rDraft, 'warden_fight'));
-  var fightBonus = timingSide === 'blue' ? rand(2, 5) : -rand(2, 5);
-  var fightR     = resolveContest(bWFight + fightBonus, rWFight, 1.5);
-  var wardenSide = fightR.blueWins ? 'blue' : 'red';
-
-  // Narrative quality based on key stats
-  var tankComp = getStat(wardenSide, 'vanguard', 'composure');
-  var suppComm = getStat(wardenSide, 'warden', 'communication');
-  var tankLine = tankComp >= 16
-    ? tagline(wardenSide,'vanguard') + ' — ' + statFlair(tankComp, COMPOSURE_HIGH, COMPOSURE_LOW) + ' — absorbs the Root Slam clean. '
-    : tankComp >= 12
-    ? tagline(wardenSide,'vanguard') + ' weathers the Root Slam, taking the hit so the carries don\'t. '
-    : tagline(wardenSide,'vanguard') + ' barely survives the Root Slam — some damage leaks through. ';
-  var healLine = suppComm >= 16
-    ? tagline(wardenSide,'warden') + ' — ' + statFlair(suppComm, COMM_HIGH, COMM_LOW) + ' — activates ' + ultName(wardenSide,'warden') + '.'
-    : suppComm >= 12
-    ? tagline(wardenSide,'warden') + ' activates ' + ultName(wardenSide,'warden') + ' in time to clear the Poison Breath.'
-    : tagline(wardenSide,'warden') + ' clears the Poison Breath, though the timing was closer than anyone would like.';
-
-  var wSwing = rand(5, 10);
-  _ms.adv = clamp(_ms.adv + (wardenSide === 'blue' ? wSwing : -wSwing), 10, 90);
-  _ms[wardenSide].shrines++; // Warden's Grasp tracks in shrine slot
-  pushEv('objective',
-    'GROVE WARDEN SLAIN! ' + tankLine + healLine + ' ' +
-    (wardenSide === 'blue' ? _ms.blueName : _ms.redName) + ' secure Warden\'s Grasp!',
-    'center',
-    { wardenBlue: wardenSide === 'blue', wardenRed: wardenSide === 'red' }
-  );
-
-  // ── Team fight erupts post-Warden ─────────────────────────────────────────────
-  _ms.t += rand(0.5, 1.2);
-  var bTF = teamContestPower(bPlayers, 'teamfight',
-    getPlaystyleMod(blueStyle, 'teamfight') * 5 + getCompSynergyBonus(bDraft, 'teamfight'));
-  var rTF = teamContestPower(rPlayers, 'teamfight',
-    getPlaystyleMod(redStyle,  'teamfight') * 5 + getCompSynergyBonus(rDraft, 'teamfight'));
-  var tfBonus1 = wardenSide === 'blue' ? rand(3, 6) : -rand(3, 6);
-  var tf1R     = resolveContest(bTF + tfBonus1, rTF, 1.6);
-  var tf1Side  = tf1R.blueWins ? 'blue' : 'red';
-  var tf1bk    = tf1Side === 'blue' ? rInt(2,4) : rInt(0,2);
-  var tf1rk    = tf1Side === 'red'  ? rInt(2,4) : rInt(0,2);
-  doTeamfight(
-    tf1Side, tf1bk, tf1rk,
-    'Team fight erupts at the Grove Heart! ' + tfOpenLine(tf1Side, tf1R.margin) + ' ' +
-    (tf1Side === 'blue' ? _ms.blueName : _ms.redName) +
-    ' win the exchange ' + Math.max(tf1bk,tf1rk) + '-for-' + Math.min(tf1bk,tf1rk) + '.',
-    'center'
-  );
-
-  // ── Inner Root falls ──────────────────────────────────────────────────────────
-  _ms.t = rand(14.5, 16.5);
-  var innerSide  = tf1Side;
-  var innerLanes = ['Inner Top-Lane Root', 'Inner Bot-Lane Root', 'Inner Mid-Lane Root'];
-  doRoot(innerSide, pick(innerLanes), innerSide === 'blue' ? 'northShrine' : 'southShrine');
-
-  // ── Crossing Shrine ───────────────────────────────────────────────────────────
-  _ms.t = rand(16.0, 18.5);
-  var bCross = teamContestPower(bPlayers, 'shrine',
-    getPlaystyleMod(blueStyle, 'shrine') * 5 + getCompSynergyBonus(bDraft, 'shrine'));
-  var rCross = teamContestPower(rPlayers, 'shrine',
-    getPlaystyleMod(redStyle,  'shrine') * 5 + getCompSynergyBonus(rDraft, 'shrine'));
-  var crossBonus  = wardenSide === 'blue' ? rand(2, 5) : -rand(2, 5);
-  var crossR      = resolveContest(bCross + crossBonus, rCross, 1.3);
-  var crossSide   = crossR.blueWins ? 'blue' : 'red';
-  doShrine(crossSide, SHRINE_NAMES[2], 'center');
-  var crossWardComm = getStat(crossSide, 'warden', 'communication');
-  doCommentary(
-    'Crossing Shrine goes to ' + (crossSide === 'blue' ? _ms.blueName : _ms.redName) + ' — ' +
-    tagline(crossSide,'warden') + ' ' + statFlair(crossWardComm, COMM_HIGH, COMM_LOW) + '.',
-    'center'
-  );
-
-  // ── Optional second skirmish ──────────────────────────────────────────────────
-  if (chance(65)) {
-    _ms.t = rand(18.0, 19.5);
-    var tf2R    = resolveContest(bTF, rTF, 1.5);
-    var tf2Side = tf2R.blueWins ? 'blue' : 'red';
-    var tf2bk   = tf2Side === 'blue' ? rInt(1,3) : rInt(0,2);
-    var tf2rk   = tf2Side === 'red'  ? rInt(1,3) : rInt(0,2);
-    var tf2Comp  = getStat(tf2Side, 'vanguard', 'composure');
-    doTeamfight(
-      tf2Side, tf2bk, tf2rk,
-      tagline(tf2Side,'vanguard') + ' — ' + statFlair(tf2Comp, COMPOSURE_HIGH, COMPOSURE_LOW) +
-      ' — engineers a pick near the Inner Root. ' +
-      (tf2Side === 'blue' ? _ms.blueName : _ms.redName) +
-      ' come out ahead ' + Math.max(tf2bk,tf2rk) + '-for-' + Math.min(tf2bk,tf2rk) + '.',
-      crossSide === 'blue' ? 'northShrine' : 'southShrine'
-    );
-  }
-}
-
-// ─── SECTION 11: Bloom Phase (20+ min) ────────────────────────────────────────
-
-function runBloom() {
-  var blueStyle = _ms.blueStyle, redStyle = _ms.redStyle;
-  var bPlayers  = _ms.blue.players, rPlayers = _ms.red.players;
-  var W = _ms.winner, L = W === 'blue' ? 'red' : 'blue';
-  var Wname = W === 'blue' ? _ms.blueName : _ms.redName;
-  var Lname = L === 'blue' ? _ms.blueName : _ms.redName;
-
-  // Phase header
-  _ms.t = rand(20.0, 22.0);
-  var wBless = _ms[W].shrines, lBless = _ms[L].shrines;
-  doCommentary(
-    '[Bloom Phase] ' + Wname + ' hold ' + wBless + ' Verdant Blessing' + (wBless !== 1 ? 's' : '') +
-    ' and ' + _ms[W].roots + ' Root' + (_ms[W].roots !== 1 ? 's' : '') + ' cleared. ' +
-    Lname + ' are at ' + lBless + ' Blessing' + (lBless !== 1 ? 's' : '') + '. The Corrupted Ancient beckons.',
-    W === 'blue' ? 'bluePush' : 'redPush'
-  );
-
-  var bDraft = _ms.draft ? _ms.draft.blue : [];
-  var rDraft = _ms.draft ? _ms.draft.red  : [];
-
-  // ── Heart Root falls ──────────────────────────────────────────────────────────
-  _ms.t += rand(1.0, 2.5);
-  var bSiege = teamContestPower(bPlayers, 'root_siege',
-    getPlaystyleMod(blueStyle, 'root_siege') * 5 + getCompSynergyBonus(bDraft, 'root_siege'));
-  var rSiege = teamContestPower(rPlayers, 'root_siege',
-    getPlaystyleMod(redStyle,  'root_siege') * 5 + getCompSynergyBonus(rDraft, 'root_siege'));
-  var heartBonus  = W === 'blue' ? rand(3, 8) : -rand(3, 8);
-  var heartR      = resolveContest(bSiege + heartBonus, rSiege, 1.6);
-  var heartSide   = heartR.blueWins ? 'blue' : 'red';
-  var heartSwing  = rand(5, 9);
-  _ms.adv = clamp(_ms.adv + (heartSide === 'blue' ? heartSwing : -heartSwing), 10, 90);
-  var heartLanes  = ['Heart Root — Top Lane', 'Heart Root — Bot Lane', 'Heart Root — Mid Lane'];
-  doRoot(heartSide, pick(heartLanes), heartSide === 'blue' ? 'bluePush' : 'redPush');
-
-  // ── Final team fight ──────────────────────────────────────────────────────────
-  _ms.t += rand(1.5, 3.0);
-  var bTF = teamContestPower(bPlayers, 'teamfight',
-    getPlaystyleMod(blueStyle, 'teamfight') * 5 + getCompSynergyBonus(bDraft, 'teamfight'));
-  var rTF = teamContestPower(rPlayers, 'teamfight',
-    getPlaystyleMod(redStyle,  'teamfight') * 5 + getCompSynergyBonus(rDraft, 'teamfight'));
-  var ftBonus = W === 'blue' ? rand(4, 9) : -rand(4, 9);
-  var ftR     = resolveContest(bTF + ftBonus, rTF, 1.7);
-  var ftSide  = ftR.blueWins ? 'blue' : 'red';
-  var ftbk    = ftSide === 'blue' ? rInt(3,5) : rInt(0,2);
-  var ftrk    = ftSide === 'red'  ? rInt(3,5) : rInt(0,2);
-  doTeamfight(
-    ftSide, ftbk, ftrk,
-    'Decisive clash outside the enemy base! ' + tagline(ftSide,'hunter') + ' finds a clean angle — ' +
-    (ftSide === 'blue' ? _ms.blueName : _ms.redName) +
-    ' win ' + Math.max(ftbk,ftrk) + '-for-' + Math.min(ftbk,ftrk) + ' and immediately converge on the Corrupted Ancient!',
-    W === 'blue' ? 'bluePush' : 'redPush'
-  );
-
-  // ── Boss fight ────────────────────────────────────────────────────────────────
-  _ms.t += rand(0.8, 1.5);
-  runBossFight();
-}
-
-// ─── SECTION 12: Corrupted Ancient Boss Fight ─────────────────────────────────
-
-function runBossFight() {
-  var W = _ms.winner, L = W === 'blue' ? 'red' : 'blue';
-  var Wname = W === 'blue' ? _ms.blueName : _ms.redName;
-  var Lname = L === 'blue' ? _ms.blueName : _ms.redName;
-  var wStyle = W === 'blue' ? _ms.blueStyle : _ms.redStyle;
-  var bPlayers = _ms.blue.players, rPlayers = _ms.red.players;
-
-  // Overall margin determines how dramatic the boss fight is
-  var bPow = bPlayers.reduce(function(s,pl) { return s + (pl ? calcRolePower(pl) : 10); }, 0);
-  var rPow = rPlayers.reduce(function(s,pl) { return s + (pl ? calcRolePower(pl) : 10); }, 0);
-  var margin  = Math.abs(bPow - rPow);
-  var isClose = margin < 4;
-
-  doCommentary(
-    Wname + ' storm the Corrupted Ancient! All five drive through the shattered Heart Root — the enemy base cracks.',
-    W === 'blue' ? 'bluePush' : 'redPush'
-  );
-
-  var wDraft = W === 'blue' ? (_ms.draft ? _ms.draft.blue : []) : (_ms.draft ? _ms.draft.red : []);
-
-  // ── Root Slam check (Vanguard: composure + teamfightPositioning) ──────────────
-  _ms.t += rand(0.4, 0.8);
-  var tankPow = calcContestPower(getPlayer(W,'vanguard'), 'boss_tank')
-    + getPlaystyleMod(wStyle, 'boss_tank') * 5
-    + getCompSynergyBonus(wDraft, 'boss_tank');
-  var slamOK  = chance(clamp(40 + (tankPow - 10) * 4, 20, 92));
-  var tankComp = getStat(W, 'vanguard', 'composure');
-  if (slamOK) {
-    pushEv('commentary',
-      'ROOT SLAM! The Ancient lunges — ' +
-      (tankComp >= 16
-        ? tagline(W,'vanguard') + ' reads it perfectly, activating ' + ultName(W,'vanguard') + ' to eat the full hit. The carries stand untouched.'
-        : tankComp >= 12
-        ? tagline(W,'vanguard') + ' holds the line and absorbs the blow. Some damage bleeds through, but the team holds.'
-        : tagline(W,'vanguard') + ' just barely positions in time — it\'s messy, but the carries survive.'),
-      W === 'blue' ? 'bluePush' : 'redPush'
-    );
-  } else {
-    // Vanguard failed — loser gets a kill credit
-    _ms[L].kills++;
-    _ms.adv = clamp(_ms.adv + (L === 'blue' ? rand(2,4) : -rand(2,4)), 10, 90);
-    pushEv('kill',
-      'ROOT SLAM CONNECTS! ' + tagline(W,'vanguard') + ' is caught out of position and launched backward! ' +
-      Lname + ' capitalise — ' + tagline(L,'arcanist') + ' picks off an exposed carry.',
-      W === 'blue' ? 'bluePush' : 'redPush',
-      { killBlue: L === 'blue' }
-    );
-  }
-
-  // ── Poison Breath check (Warden: communication + objectiveExecution) ──────────
-  _ms.t += rand(0.5, 1.0);
-  var healPow   = calcContestPower(getPlayer(W,'warden'), 'boss_cleanse')
-    + getPlaystyleMod(wStyle, 'boss_cleanse') * 5
-    + getCompSynergyBonus(wDraft, 'boss_cleanse');
-  var cleanseOK = chance(clamp(40 + (healPow - 10) * 4, 20, 92));
-  var suppComm  = getStat(W, 'warden', 'communication');
-  if (cleanseOK) {
-    pushEv('commentary',
-      'POISON BREATH — a wall of corrosive spores surges forward! ' +
-      (suppComm >= 16
-        ? tagline(W,'warden') + ' calls the timing to the millisecond, activating ' + ultName(W,'warden') + '. Not a single DoT stack lands on the carries. Flawless.'
-        : suppComm >= 12
-        ? tagline(W,'warden') + ' activates ' + ultName(W,'warden') + ' and clears the Poison Breath stacks in time.'
-        : tagline(W,'warden') + ' just manages to clear the DoT before it becomes critical.'),
-      W === 'blue' ? 'bluePush' : 'redPush'
-    );
-  } else {
-    pushEv('commentary',
-      'POISON BREATH — the DoT stacks spread through the backline unchecked! ' +
-      tagline(W,'warden') + ' activates ' + ultName(W,'warden') + ' a beat too late. ' +
-      Wname + ' grit their teeth and push through the burning pain.',
-      W === 'blue' ? 'bluePush' : 'redPush'
-    );
-  }
-
-  // ── Enrage check (triggered if team DPS is mediocre or match is close) ────────
-  var wPlayers  = W === 'blue' ? bPlayers : rPlayers;
-  var dpsPow    = teamContestPower(wPlayers, 'boss_dps',
-    getPlaystyleMod(wStyle, 'boss_dps') * 5 + getCompSynergyBonus(wDraft, 'boss_dps'));
-  var avgDps    = dpsPow / 5;
-  var enrage    = isClose || avgDps < 12.5;
-
-  if (enrage) {
-    _ms.t += rand(0.8, 1.5);
-    var hunterAdapt = getStat(W, 'hunter', 'adaptability');
-    pushEv('commentary',
-      'THE ANCIENT ENRAGES AT 50% HP! Forest Wraiths erupt from the grove floor — adds swarm the arena! ' +
-      tagline(W,'arcanist') + ' pivots immediately with ' + ultName(W,'arcanist') + ' to clear the Wraiths. ' +
-      tagline(W,'hunter') + ' — ' + statFlair(hunterAdapt, COMPOSURE_HIGH, COMPOSURE_LOW) +
-      " — keeps the DPS rolling through the chaos. The Ancient's fury is no match for this team.",
-      W === 'blue' ? 'bluePush' : 'redPush'
-    );
-    // In close matches, the loser makes a desperate counter-play
-    if (isClose) {
-      _ms.t += rand(0.3, 0.7);
-      doKill(
-        L,
-        tagline(L,'arcanist') + ' teleports back for a desperation split! ' +
-        Lname + ' pick off an isolated target — but the Ancient is already at 20% HP.',
-        L === 'blue' ? 'bluePush' : 'redPush'
-      );
+    // Force end at 180 ticks if no Ancient has fallen
+    if (!score.winner && tick >= 180) {
+      const bs = score.blueKills*3 + score.blueShrines*5 + score.blueRoots*8;
+      const rs = score.redKills *3 + score.redShrines *5 + score.redRoots *8;
+      if (bs !== rs) { score.winner = bs > rs ? 'blue' : 'red'; }
+      else {
+        const ba = all.filter(a=>a.side==='blue'&&!a.isDead).length;
+        const ra = all.filter(a=>a.side==='red' &&!a.isDead).length;
+        score.winner = ba >= ra ? 'blue' : 'red';
+      }
     }
   }
 
-  // ── Game end ──────────────────────────────────────────────────────────────────
-  _ms.t += rand(1.0, 2.0);
-  var style = margin >= 8 ? pick(DOMINANT_WIN) : pick(CLOSE_WIN);
-  _ms.adv = W === 'blue' ? rInt(72, 90) : rInt(10, 28);
-  // Reference the winning comp synergy if one exists
-  var wSyn = (W === 'blue' ? (_ms.draft && _ms.draft.blueSynergies[0]) : (_ms.draft && _ms.draft.redSynergies[0]));
-  var synLine = wSyn ? ' Their ' + wSyn.name + ' was the key.' : '';
-
-  pushEv('result',
-    'VICTORY \u2014 ' + Wname + ' defeat ' + Lname + ' ' + style + '! ' +
-    'The Corrupted Ancient falls at ' + fmt(_ms.t) + '.' + synLine + ' ' +
-    'Final: ' + _ms.blueName + ' ' + _ms.blue.kills + 'K / ' + _ms.redName + ' ' + _ms.red.kills + 'K',
-    W === 'blue' ? 'bluePush' : 'redPush',
-    { gameOver: true, winnerBlue: W === 'blue' }
-  );
-}
-
-// ─── SECTION 13: Main simulateMatch ───────────────────────────────────────────
-
-// preDraft is optional — pass the draft shown on the draft screen so the
-// simulation uses exactly what the player saw (avoids a second random draft).
-function simulateMatch(blueTeamArr, redTeamArr, blueName, redName, preDraft) {
-  // Resolve team playstyles from live G state when available
-  var blueStyle = 'engage', redStyle = 'engage';
-  if (typeof G !== 'undefined' && G) {
-    var blueTeamId = null, redTeamId = null;
-    blueTeamArr.forEach(function(pl) { if (pl && pl.teamId && !blueTeamId) blueTeamId = pl.teamId; });
-    redTeamArr.forEach(function(pl)  { if (pl && pl.teamId && !redTeamId)  redTeamId  = pl.teamId; });
-    if (blueTeamId && G.teams[blueTeamId]) blueStyle = G.teams[blueTeamId].tactics.playstyle || 'engage';
-    if (redTeamId  && G.teams[redTeamId])  redStyle  = G.teams[redTeamId].tactics.playstyle  || 'engage';
+  if (!score.winner) {
+    const bs = score.blueKills + score.blueShrines + score.blueRoots;
+    const rs = score.redKills  + score.redShrines  + score.redRoots;
+    score.winner = bs >= rs ? 'blue' : 'red';
   }
 
-  // Use pre-built draft if provided (avoids double-drafting when player saw the draft screen)
-  var draft = preDraft || draftChampions(blueTeamArr, redTeamArr);
+  const endTick = goldSnapshots.length;
+  events.push({
+    tick: endTick, side: score.winner, time: fmtTime(endTick), type: 'result',
+    text: `${score.winner === 'blue' ? blueName : redName} wins!`,
+    blueKills:score.blueKills, redKills:score.redKills,
+    blueShrines:score.blueShrines, redShrines:score.redShrines,
+    blueRoots:score.blueRoots, redRoots:score.redRoots,
+    advAfter: score.winner === 'blue' ? 80 : 20,
+    positions: posMap(all),
+  });
 
-  // Pre-determine match winner: role power + playstyle bonus + draft counter edge
-  var bPow = blueTeamArr.reduce(function(s,pl) { return s + (pl ? calcRolePower(pl) : 10); }, 0);
-  var rPow = redTeamArr.reduce(function(s,pl)  { return s + (pl ? calcRolePower(pl) : 10); }, 0);
-  var bStyleBonus = Object.values(PLAYSTYLE_MODS[blueStyle] && PLAYSTYLE_MODS[blueStyle].bonus || {}).reduce(function(s,v){ return s+v; }, 0) * 0.15;
-  var rStyleBonus = Object.values(PLAYSTYLE_MODS[redStyle]  && PLAYSTYLE_MODS[redStyle].bonus  || {}).reduce(function(s,v){ return s+v; }, 0) * 0.15;
-  var diff        = (bPow + bStyleBonus) - (rPow + rStyleBonus) + draft.counterScore;
-  var bWinChance  = clamp(50 + diff * 1.8, 12, 88);
-  var blueWins    = chance(bWinChance);
-
-  // Initialise match state
-  initMatchState(blueTeamArr, redTeamArr, blueName, redName, blueStyle, redStyle);
-  _ms.draft  = draft;
-  _ms.winner = blueWins ? 'blue' : 'red';
-  _ms.adv    = blueWins
-    ? clamp(50 + diff * 1.5, 50, 78)
-    : clamp(50 - diff * 1.5, 22, 50);
-
-  // Run all three phases
-  runSeedling();
-  runGrowth();
-  runBloom();
-
-  var buildPlayerStats = function(sideArr, perf, draftPicks) {
-    return sideArr.map(function(pl, i) {
-      var champion = draftPicks && draftPicks[i] ? draftPicks[i].champion : '???';
-      return {
-        name:      pl ? pl.name     : '?',
-        pos:       POSITIONS[i],
-        champion:  champion,
-        kills:     perf[i].kills,
-        deaths:    perf[i].deaths,
-        assists:   perf[i].assists,
-      };
-    });
+  // Build KDA table data
+  const playerStats = {
+    blue: blueAgents.map((ag, i) => ({
+      name:    blueTeamArr[i]?.name || ag.champName,
+      pos:     ag.pos,
+      champion:ag.champName,
+      kills:   ag.kills, deaths: ag.deaths, assists: ag.assists, cs: ag.cs,
+    })),
+    red: redAgents.map((ag, i) => ({
+      name:    redTeamArr[i]?.name || ag.champName,
+      pos:     ag.pos,
+      champion:ag.champName,
+      kills:   ag.kills, deaths: ag.deaths, assists: ag.assists, cs: ag.cs,
+    })),
   };
 
+  // Persist career stats to G if available
+  if (typeof G !== 'undefined' && G?.players) {
+    _persistCareer(blueAgents, blueTeamArr, score.winner === 'blue');
+    _persistCareer(redAgents,  redTeamArr,  score.winner === 'red');
+    if (G.stats) G.stats.totalMatches = (G.stats.totalMatches||0) + 1;
+  }
+
   return {
-    winner:        _ms.winner,
-    events:        _ev,
-    blueKills:     _ms.blue.kills,
-    redKills:      _ms.red.kills,
-    blueShrines:   _ms.blue.shrines,
-    redShrines:    _ms.red.shrines,
-    blueRoots:     _ms.blue.roots,
-    redRoots:      _ms.red.roots,
-    duration:      Math.floor(_ms.t),
-    draft:         draft,
-    goldSnapshots: _ms.goldSnapshots,
-    blueGoldFinal: _ms.blue.gold,
-    redGoldFinal:  _ms.red.gold,
-    playerStats: {
-      blue: buildPlayerStats(_ms.blue.players, _ms.blue.perf, draft ? draft.blue : null),
-      red:  buildPlayerStats(_ms.red.players,  _ms.red.perf,  draft ? draft.red  : null),
-    },
+    winner: score.winner,
+    blueKills: score.blueKills, redKills: score.redKills,
+    blueShrines: score.blueShrines, redShrines: score.redShrines,
+    blueRoots: score.blueRoots, redRoots: score.redRoots,
+    duration: Math.round(endTick * TICK_S / 60),
+    goldSnapshots,
+    playerStats,
+    events,
+    snapshots,
+    draft,
+  };
+}
+
+function _persistCareer(agents, players, won) {
+  agents.forEach((ag, i) => {
+    const p  = players[i];
+    const cp = p?.id ? G.players[p.id] : null;
+    if (!cp?.career) return;
+    cp.career.gamesPlayed++;
+    if (won) cp.career.wins++; else cp.career.losses++;
+    cp.career.kills       += ag.kills;
+    cp.career.deaths      += ag.deaths;
+    cp.career.assists     += ag.assists;
+    cp.career.cs          += ag.cs;
+    cp.career.damageDealt += ag.damageDealt;
+    const cs = cp.career.championStats;
+    if (!cs[ag.champName])
+      cs[ag.champName] = { games:0, kills:0, deaths:0, assists:0 };
+    cs[ag.champName].games++;
+    cs[ag.champName].kills   += ag.kills;
+    cs[ag.champName].deaths  += ag.deaths;
+    cs[ag.champName].assists += ag.assists;
+  });
+}
+
+// ─── Quick sim (AI vs AI, no PBP) ────────────────────────────────────────────
+
+function quickSimulateMatch(homePlayers, awayPlayers) {
+  const homeScore = homePlayers.reduce((s,p) => s + (p ? calcOverall(p) : 50), 0);
+  const awayScore = awayPlayers.reduce((s,p) => s + (p ? calcOverall(p) : 50), 0);
+  const diff      = homeScore - awayScore;
+  return Math.random() * 100 < Math.min(85, Math.max(15, 50 + diff * 0.5)) ? 'blue' : 'red';
+}
+
+// ─── Draft system ─────────────────────────────────────────────────────────────
+
+const COMP_SYNERGIES = {
+  ENGAGE:  ['tank','fighter'],
+  POKE:    ['mage','marksman'],
+  PICK:    ['assassin','sentinel'],
+  PROTECT: ['sentinel','marksman'],
+  SCALING: ['mage','marksman'],
+};
+
+const COMP_COUNTERS = {
+  ENGAGE:  ['POKE','SCALING'],
+  POKE:    ['ENGAGE','PICK'],
+  PICK:    ['PROTECT','SCALING'],
+  PROTECT: ['ENGAGE','POKE'],
+  SCALING: ['PICK','ENGAGE'],
+};
+
+const COUNTERED_BY = {
+  tank:     ['assassin','mage'],
+  fighter:  ['mage','marksman'],
+  assassin: ['sentinel','tank'],
+  mage:     ['assassin','marksman'],
+  marksman: ['assassin','fighter'],
+  sentinel: ['mage','fighter'],
+};
+
+function getDominantCompType(picks) {
+  const counts = {};
+  picks.forEach(c => { const ct = CHAMPIONS[c]?.compType||'ENGAGE'; counts[ct]=(counts[ct]||0)+1; });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'ENGAGE';
+}
+
+function champBanValue(champName, player) {
+  const cd = CHAMPIONS[champName];
+  if (!cd) return 0;
+  const roleClass = { vanguard:'tank', ranger:'assassin', arcanist:'mage', hunter:'marksman', warden:'sentinel' }[player.position] || 'mage';
+  const classFit  = cd.class.toLowerCase() === roleClass ? 1.2 : 0.85;
+  return ((player.stats?.mechanics||10)/20*15 + (player.stats?.csAccuracy||10)/2) * classFit;
+}
+
+function generateBans(targetPlayers, numBans) {
+  const banned = [];
+  targetPlayers.forEach(p => {
+    if (!p) return;
+    const top = [...(p.champions||[])].sort((a,b)=>champBanValue(b,p)-champBanValue(a,p))[0];
+    if (top && !banned.includes(top)) banned.push(top);
+  });
+  return banned.slice(0, numBans);
+}
+
+function getCounterScore(bluePicks, redPicks) {
+  let score = 0;
+  bluePicks.forEach(bc => {
+    const bClass = CHAMPIONS[bc]?.class?.toLowerCase()||'mage';
+    redPicks.forEach(rc => {
+      const rClass = CHAMPIONS[rc]?.class?.toLowerCase()||'mage';
+      if (COUNTERED_BY[rClass]?.includes(bClass)) score += 1;
+      if (COUNTERED_BY[bClass]?.includes(rClass)) score -= 1;
+    });
+  });
+  return Math.round(score * 0.25 * 10) / 10;
+}
+
+function pickChampion(player, pos, banned, allPicked, enemyPicks) {
+  if (!player) {
+    const fb = Object.keys(CHAMPIONS).find(c => !banned.includes(c) && !allPicked.includes(c));
+    return fb || 'Wraithfern';
+  }
+  const pool    = (player.champions||[]).filter(c => !banned.includes(c) && !allPicked.includes(c));
+  const counter = pool.find(c => {
+    const cl = CHAMPIONS[c]?.class?.toLowerCase();
+    return enemyPicks.some(ec => COUNTERED_BY[CHAMPIONS[ec]?.class?.toLowerCase()]?.includes(cl));
+  });
+  return counter || pool[0]
+    || Object.keys(CHAMPIONS).find(c => !banned.includes(c) && !allPicked.includes(c))
+    || 'Wraithfern';
+}
+
+function draftChampions(blueTeamArr, redTeamArr) {
+  const blueBans = generateBans(redTeamArr,  5);
+  const redBans  = generateBans(blueTeamArr, 5);
+  const allBans  = [...blueBans, ...redBans];
+  const picked   = [];
+  const bluePicks = [], redPicks = [];
+
+  blueTeamArr.forEach((p, i) => {
+    const c = pickChampion(p, POSITIONS[i], allBans, picked, redPicks);
+    bluePicks.push(c); picked.push(c);
+  });
+  redTeamArr.forEach((p, i) => {
+    const c = pickChampion(p, POSITIONS[i], allBans, picked, bluePicks);
+    redPicks.push(c); picked.push(c);
+  });
+
+  return {
+    blue: bluePicks, red: redPicks,
+    bans: { blue: blueBans, red: redBans },
+    blueSynergies: COMP_SYNERGIES[getDominantCompType(bluePicks)] || [],
+    redSynergies:  COMP_SYNERGIES[getDominantCompType(redPicks)]  || [],
+    counterScore:  getCounterScore(bluePicks, redPicks),
   };
 }
