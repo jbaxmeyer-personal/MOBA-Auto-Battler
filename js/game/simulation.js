@@ -42,18 +42,18 @@ const SPAWN = {
 // Where each role walks during the laning phase
 const LANE_POS = {
   blue: {
-    vanguard: { x: 35,  y: 150 },   // top lane — left edge midpoint
-    ranger:   { x: 88,  y: 108 },   // blue jungle
-    arcanist: { x: 115, y: 185 },   // mid lane blue side
-    hunter:   { x: 165, y: 265 },   // bot lane — bottom edge
-    warden:   { x: 142, y: 265 },   // bot lane support
+    top:     { x: 35,  y: 150 },   // top lane — left edge midpoint
+    jungle:  { x: 88,  y: 108 },   // blue jungle
+    mid:     { x: 115, y: 185 },   // mid lane blue side
+    adc:     { x: 165, y: 265 },   // bot lane — bottom edge
+    support: { x: 142, y: 265 },   // bot lane support
   },
   red: {
-    vanguard: { x: 150, y: 35  },   // top lane — top edge midpoint
-    ranger:   { x: 212, y: 192 },   // red jungle
-    arcanist: { x: 185, y: 115 },   // mid lane red side
-    hunter:   { x: 265, y: 165 },   // bot lane — right edge
-    warden:   { x: 265, y: 142 },   // bot lane support
+    top:     { x: 150, y: 35  },   // top lane — top edge midpoint
+    jungle:  { x: 212, y: 192 },   // red jungle
+    mid:     { x: 185, y: 115 },   // mid lane red side
+    adc:     { x: 265, y: 165 },   // bot lane — right edge
+    support: { x: 265, y: 142 },   // bot lane support
   },
 };
 
@@ -271,8 +271,8 @@ function decideAction(agent, allies, enemies, objs, jungles, tick, phase) {
 
   const enemySide = agent.side === 'blue' ? 'red' : 'blue';
 
-  // 5. Ranger: jungle or gank
-  if (agent.pos === 'ranger') {
+  // 5. Jungle: jungle or gank
+  if (agent.pos === 'jungle') {
     if (gameSense > 12) {
       const gankTarget = enemies.find(e => !e.isDead && e.hp/e.maxHp < 0.55 && dist(agent,e) < 100);
       if (gankTarget) {
@@ -621,8 +621,8 @@ function tickObjRespawns(objs, tick) {
 function tickPassiveGold(agents) {
   agents.forEach(ag => {
     if (ag.isDead) return;
-    ag.gold += ag.pos === 'ranger' ? 40 : 44;
-    if (ag.state === 'laning' && ag.pos !== 'ranger') {
+    ag.gold += ag.pos === 'jungle' ? 40 : 44;
+    if (ag.state === 'laning' && ag.pos !== 'jungle') {
       const rate = 0.28 + (ag.playerRef?.stats?.csAccuracy || 10) / 20 * 0.52;
       if (Math.random() < rate) { ag.cs++; ag.gold += 21; grantXP(ag, XP_CS); }
     }
@@ -961,7 +961,7 @@ function getDominantCompType(picks) {
 function champBanValue(champName, player) {
   const cd = CHAMPIONS[champName];
   if (!cd) return 0;
-  const roleClass = { vanguard:'tank', ranger:'assassin', arcanist:'mage', hunter:'marksman', warden:'sentinel' }[player.position] || 'mage';
+  const roleClass = { top:'tank', jungle:'assassin', mid:'mage', adc:'marksman', support:'sentinel' }[player.position] || 'mage';
   const classFit  = cd.class.toLowerCase() === roleClass ? 1.2 : 0.85;
   return ((player.stats?.mechanics||10)/20*15 + (player.stats?.csAccuracy||10)/2) * classFit;
 }

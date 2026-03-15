@@ -31,11 +31,11 @@ function attrColor(val) {
 }
 
 function posIcon(pos) {
-  return { vanguard:'⚔️', ranger:'🌿', arcanist:'🔮', hunter:'🏹', warden:'🛡️' }[pos] || '👤';
+  return { top:'⚔️', jungle:'🌿', mid:'✦', adc:'🏹', support:'🛡️' }[pos] || '👤';
 }
 
 function posLabel(pos) {
-  return { vanguard:'Vanguard', ranger:'Ranger', arcanist:'Arcanist', hunter:'Hunter', warden:'Warden' }[pos] || pos;
+  return { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support' }[pos] || pos;
 }
 
 // ─── Personality Badge ────────────────────────────────────────────────────────
@@ -859,6 +859,9 @@ function showDraftChampInfo(champName) {
     </div>`;
   };
 
+  const roleMap = { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support', arcanist:'Mid', vanguard:'Top', ranger:'Jungle', hunter:'ADC', warden:'Support' };
+  const roleDisplay = cd.role ? (roleMap[cd.role] || cd.role) : '';
+
   el.innerHTML = `
     <div class="dci-wrap">
       <div class="dci-left">
@@ -866,6 +869,7 @@ function showDraftChampInfo(champName) {
           <span class="dci-name">${_escHtml(champName)}</span>
           ${b ? `<span class="class-badge" style="color:${b.color};border-color:${b.color}">${b.label}</span>` : ''}
           ${cd.compType ? `<span class="dci-comp">${cd.compType}</span>` : ''}
+          ${roleDisplay ? `<span class="dci-role">${roleDisplay}</span>` : ''}
         </div>
         ${cd.lore ? `<div class="dci-lore">${_escHtml(cd.lore)}</div>` : ''}
         <div class="dci-stats">

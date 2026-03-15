@@ -2,7 +2,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const POSITIONS = ['vanguard', 'ranger', 'arcanist', 'hunter', 'warden'];
+const POSITIONS = ['top', 'jungle', 'mid', 'adc', 'support'];
 
 const PLAYSTYLES = {
   engage:    { name: 'Engage',     desc: 'Frontload team fights, contest Ley Shrines aggressively' },
@@ -16,73 +16,73 @@ const PLAYSTYLES = {
 // ─── Scout Pool ───────────────────────────────────────────────────────────────
 
 const SCOUT_POOL = [
-  { id:'sc001', name:'Fernwick',  position:'vanguard',  age:19, nationality:'EU', potential:'high',
+  { id:'sc001', name:'Fernwick',  position:'top',       age:19, nationality:'EU', potential:'high',
     champions:['Bogveil','Thornwall','Stoneguard'],
     contract:{ salary:45000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:11,csAccuracy:9,teamfightPositioning:12,mapMovement:10,objectiveExecution:10,championPoolDepth:8,
             decisionMaking:10,gameSense:11,communication:9,leadership:8,adaptability:12,composure:9 },
     personality:'grinder', playStyle:'utility', teamId:null, discovered:false },
-  { id:'sc002', name:'Ashblaze',  position:'arcanist',  age:20, nationality:'NA', potential:'medium',
+  { id:'sc002', name:'Ashblaze',  position:'mid',        age:20, nationality:'NA', potential:'medium',
     champions:['Wraithfern','Bombspore','Vaulthorn'],
     contract:{ salary:40000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:12,csAccuracy:13,teamfightPositioning:10,mapMovement:9,objectiveExecution:9,championPoolDepth:10,
             decisionMaking:12,gameSense:11,communication:8,leadership:7,adaptability:11,composure:10 },
     personality:'volatile', playStyle:'carry', teamId:null, discovered:false },
-  { id:'sc003', name:'Coldpath',  position:'ranger',    age:18, nationality:'KOR', potential:'high',
+  { id:'sc003', name:'Coldpath',  position:'jungle',    age:18, nationality:'KOR', potential:'high',
     champions:['Shade','Hexwing','Fangwhisper'],
     contract:{ salary:35000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:13,csAccuracy:10,teamfightPositioning:10,mapMovement:14,objectiveExecution:11,championPoolDepth:9,
             decisionMaking:11,gameSense:12,communication:7,leadership:6,adaptability:13,composure:10 },
     personality:'maverick', playStyle:'aggressive', teamId:null, discovered:false },
-  { id:'sc004', name:'Driftmere', position:'hunter',    age:21, nationality:'NA', potential:'medium',
+  { id:'sc004', name:'Driftmere', position:'adc',       age:21, nationality:'NA', potential:'medium',
     champions:['Wildshot','Swiftarrow','Starshot'],
     contract:{ salary:50000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:11,csAccuracy:13,teamfightPositioning:11,mapMovement:9,objectiveExecution:10,championPoolDepth:10,
             decisionMaking:10,gameSense:10,communication:9,leadership:8,adaptability:10,composure:11 },
     personality:'pro', playStyle:'carry', teamId:null, discovered:false },
-  { id:'sc005', name:'Groveborn', position:'warden',    age:22, nationality:'EU', potential:'medium',
+  { id:'sc005', name:'Groveborn', position:'support',   age:22, nationality:'EU', potential:'medium',
     champions:['Darkblossom','Irongrasp','Stonewall'],
     contract:{ salary:42000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:9,csAccuracy:7,teamfightPositioning:13,mapMovement:8,objectiveExecution:11,championPoolDepth:9,
             decisionMaking:12,gameSense:13,communication:14,leadership:12,adaptability:10,composure:11 },
     personality:'leader', playStyle:'utility', teamId:null, discovered:false },
-  { id:'sc006', name:'Thistlerun',position:'vanguard',  age:20, nationality:'NA', potential:'medium',
+  { id:'sc006', name:'Thistlerun',position:'top',       age:20, nationality:'NA', potential:'medium',
     champions:['Deeproot','Ironsong','Stormhide'],
     contract:{ salary:38000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:10,csAccuracy:8,teamfightPositioning:11,mapMovement:9,objectiveExecution:9,championPoolDepth:8,
             decisionMaking:9,gameSense:10,communication:10,leadership:9,adaptability:11,composure:10 },
     personality:'grinder', playStyle:'utility', teamId:null, discovered:false },
-  { id:'sc007', name:'Ravenmoss', position:'arcanist',  age:19, nationality:'KOR', potential:'high',
+  { id:'sc007', name:'Ravenmoss', position:'mid',       age:19, nationality:'KOR', potential:'high',
     champions:['Emberpyre','Spiritfox','Iceveil'],
     contract:{ salary:32000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:14,csAccuracy:12,teamfightPositioning:9,mapMovement:10,objectiveExecution:8,championPoolDepth:11,
             decisionMaking:13,gameSense:12,communication:7,leadership:6,adaptability:14,composure:9 },
     personality:'maverick', playStyle:'carry', teamId:null, discovered:false },
-  { id:'sc008', name:'Stormcroft',position:'hunter',    age:18, nationality:'EU', potential:'high',
+  { id:'sc008', name:'Stormcroft',position:'adc',       age:18, nationality:'EU', potential:'high',
     champions:['Duskwarden','Embervane','Wildshot'],
     contract:{ salary:30000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:12,csAccuracy:14,teamfightPositioning:10,mapMovement:8,objectiveExecution:9,championPoolDepth:8,
             decisionMaking:10,gameSense:11,communication:8,leadership:7,adaptability:12,composure:10 },
     personality:'grinder', playStyle:'carry', teamId:null, discovered:false },
-  { id:'sc009', name:'Willowfen', position:'warden',    age:23, nationality:'NA', potential:'medium',
+  { id:'sc009', name:'Willowfen', position:'support',   age:23, nationality:'NA', potential:'medium',
     champions:['Tidecaller','Gravewarden','Darkblossom'],
     contract:{ salary:48000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:8,csAccuracy:7,teamfightPositioning:12,mapMovement:9,objectiveExecution:11,championPoolDepth:10,
             decisionMaking:13,gameSense:14,communication:15,leadership:13,adaptability:9,composure:12 },
     personality:'leader', playStyle:'shotcaller', teamId:null, discovered:false },
-  { id:'sc010', name:'Ironveil',  position:'ranger',    age:21, nationality:'KOR', potential:'medium',
+  { id:'sc010', name:'Ironveil',  position:'jungle',    age:21, nationality:'KOR', potential:'medium',
     champions:['Driftblade','Shade','Hexwing'],
     contract:{ salary:44000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:12,csAccuracy:9,teamfightPositioning:11,mapMovement:13,objectiveExecution:10,championPoolDepth:9,
             decisionMaking:11,gameSense:12,communication:8,leadership:7,adaptability:11,composure:10 },
     personality:'pro', playStyle:'aggressive', teamId:null, discovered:false },
-  { id:'sc011', name:'Briarcoil', position:'vanguard',  age:17, nationality:'EU', potential:'high',
+  { id:'sc011', name:'Briarcoil', position:'top',       age:17, nationality:'EU', potential:'high',
     champions:['Thornback','Sylvara','Briarvex'],
     contract:{ salary:28000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:10,csAccuracy:7,teamfightPositioning:10,mapMovement:8,objectiveExecution:8,championPoolDepth:7,
             decisionMaking:9,gameSense:9,communication:8,leadership:7,adaptability:13,composure:8 },
     personality:'grinder', playStyle:'utility', teamId:null, discovered:false },
-  { id:'sc012', name:'Cinderfall',position:'arcanist',  age:24, nationality:'NA', potential:'medium',
+  { id:'sc012', name:'Cinderfall',position:'mid',       age:24, nationality:'NA', potential:'medium',
     champions:['Vaulthorn','Bombspore','Wraithfern'],
     contract:{ salary:55000, yearsLeft:1, expiryYear:2027 },
     stats:{ mechanics:11,csAccuracy:12,teamfightPositioning:10,mapMovement:8,objectiveExecution:9,championPoolDepth:11,
@@ -722,7 +722,7 @@ function fmtMoneySafe(n) {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function posLabel(pos) {
-  return { vanguard:'Vanguard', ranger:'Ranger', arcanist:'Arcanist', hunter:'Hunter', warden:'Warden' }[pos] || pos;
+  return { top:'Top', jungle:'Jungle', mid:'Mid', adc:'ADC', support:'Support' }[pos] || pos;
 }
 
 function randomPlaystyle() {

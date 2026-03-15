@@ -905,11 +905,11 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
   display: inline-block; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .3px;
 }
-.pos-vanguard  { background: #0d2a4a; color: #4fc3f7; }
-.pos-ranger    { background: #0a2a0a; color: #66bb6a; }
-.pos-arcanist  { background: #1a0a2a; color: #ce93d8; }
-.pos-hunter    { background: #2a1a00; color: #ffb74d; }
-.pos-warden    { background: #2a0d0d; color: #ef9a9a; }
+.pos-top       { background: #0d2a4a; color: #4fc3f7; }
+.pos-jungle    { background: #0a2a0a; color: #66bb6a; }
+.pos-mid       { background: #1a0a2a; color: #ce93d8; }
+.pos-adc       { background: #2a1a00; color: #ffb74d; }
+.pos-support   { background: #2a0d0d; color: #ef9a9a; }
 
 .morale-bar-wrap { display: flex; align-items: center; gap: 5px; }
 .morale-bar-bg   { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; max-width: 60px; }
@@ -1151,6 +1151,11 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .dci-comp {
   font-size: 10px; color: #9b59b6; border: 1px solid #9b59b6;
   border-radius: 3px; padding: 1px 5px; font-weight: 700;
+}
+.dci-role {
+  font-size: 10px; color: #4fc3f7; border: 1px solid #1a5a8a;
+  border-radius: 3px; padding: 1px 6px; font-weight: 700;
+  background: #0a1a2a;
 }
 .dci-lore {
   font-size: 10px; color: #7a9a7a; font-style: italic;

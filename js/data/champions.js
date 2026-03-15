@@ -44,7 +44,7 @@ const CHAMPIONS = {
 
   // Fiddlesticks-inspired: vamp channel, fear, ult-bomb
   'Wraithfern': {
-    class:'Mage', compType:'SCALING', role:'arcanist',
+    class:'Mage', compType:'SCALING', role:'mid',
     baseHp:440, baseDmg:32, attackRange:550, moveSpeed:298, physResist:25, magicResist:46,
     lore:'A vine scarecrow stitched from stolen souls. Its presence drains the will to fight.',
     abilities:{
@@ -60,7 +60,7 @@ const CHAMPIONS = {
 
   // Ziggs-inspired: longest range, poke bombs, global ult
   'Bombspore': {
-    class:'Mage', compType:'POKE', role:'arcanist',
+    class:'Mage', compType:'POKE', role:'mid',
     baseHp:400, baseDmg:28, attackRange:625, moveSpeed:294, physResist:22, magicResist:42,
     lore:'A crazed alchemist who weaponised Grove spores into explosive shells with terrifying range.',
     abilities:{
@@ -76,7 +76,7 @@ const CHAMPIONS = {
 
   // Veigar-inspired: CC cage, stacking power, execute ult
   'Vaulthorn': {
-    class:'Mage', compType:'SCALING', role:'arcanist',
+    class:'Mage', compType:'SCALING', role:'mid',
     baseHp:410, baseDmg:28, attackRange:520, moveSpeed:294, physResist:22, magicResist:44,
     lore:'An ancient imprisoned spirit whose power grows with each soul it consumes.',
     passive:{ type:'stack', stat:'abilityPower', perKillAssist:4, desc:'Gains +4 AP on every kill or assist permanently.' },
@@ -92,7 +92,7 @@ const CHAMPIONS = {
 
   // Brand-inspired: bouncing ult wildfire
   'Emberpyre': {
-    class:'Mage', compType:'POKE', role:'arcanist',
+    class:'Mage', compType:'POKE', role:'mid',
     baseHp:430, baseDmg:30, attackRange:540, moveSpeed:296, physResist:23, magicResist:42,
     lore:'A living flame that never stops burning. Its ultimate ricochets between enemies like wildfire.',
     abilities:{
@@ -107,7 +107,7 @@ const CHAMPIONS = {
 
   // Ahri-inspired: charm CC, 3-charge mobility ult
   'Spiritfox': {
-    class:'Mage', compType:'ASSASSIN', role:'arcanist',
+    class:'Mage', compType:'ASSASSIN', role:'mid',
     baseHp:400, baseDmg:35, attackRange:520, moveSpeed:335, physResist:28, magicResist:40,
     lore:'A nine-tailed fox spirit. Her charm stops enemies cold; her ult makes her uncatchable.',
     abilities:{
@@ -123,7 +123,7 @@ const CHAMPIONS = {
 
   // Lissandra-inspired: glacial CC, ult freezes self or enemy
   'Iceveil': {
-    class:'Mage', compType:'ENGAGE', role:'arcanist',
+    class:'Mage', compType:'ENGAGE', role:'mid',
     baseHp:430, baseDmg:30, attackRange:480, moveSpeed:300, physResist:24, magicResist:45,
     lore:'An ice witch whose control over frost borders on divine. Nothing escapes her glacial grasp.',
     abilities:{
@@ -143,7 +143,7 @@ const CHAMPIONS = {
 
   // Jinx-inspired: slow early, explosive late, kill-reset passive
   'Wildshot': {
-    class:'Marksman', compType:'SCALING', role:'hunter',
+    class:'Marksman', compType:'SCALING', role:'adc',
     baseHp:450, baseDmg:30, attackRange:575, moveSpeed:305, physResist:28, magicResist:28,
     lore:'A chaos-addicted shooter who gets faster and deadlier with every kill. Three items and she deletes the world.',
     passive:{ type:'killReset', bonusAtkSpeedPct:0.35, bonusMoveSpeedPct:0.20, duration:3, desc:'Get Excited: kill or assist grants a speed burst for 3 ticks.' },
@@ -159,7 +159,7 @@ const CHAMPIONS = {
   },
 
   'Swiftarrow': {
-    class:'Marksman', compType:'POKE', role:'hunter',
+    class:'Marksman', compType:'POKE', role:'adc',
     baseHp:440, baseDmg:34, attackRange:575, moveSpeed:320, physResist:28, magicResist:27,
     lore:'Speed and precision. Always moving, always shooting.',
     abilities:{
@@ -174,7 +174,7 @@ const CHAMPIONS = {
   },
 
   'Starshot': {
-    class:'Marksman', compType:'SCALING', role:'hunter',
+    class:'Marksman', compType:'SCALING', role:'adc',
     baseHp:440, baseDmg:32, attackRange:590, moveSpeed:310, physResist:27, magicResist:28,
     lore:'Patient and precise. The longer the game goes, the brighter the star burns.',
     abilities:{
@@ -189,7 +189,7 @@ const CHAMPIONS = {
   },
 
   'Duskwarden': {
-    class:'Marksman', compType:'SCALING', role:'hunter',
+    class:'Marksman', compType:'SCALING', role:'adc',
     baseHp:450, baseDmg:33, attackRange:560, moveSpeed:315, physResist:28, magicResist:28,
     lore:'A shadow archer who phases in and out of reality. Hard to pin down; harder to kill.',
     abilities:{
@@ -203,7 +203,7 @@ const CHAMPIONS = {
   },
 
   'Embervane': {
-    class:'Marksman', compType:'ENGAGE', role:'hunter',
+    class:'Marksman', compType:'ENGAGE', role:'adc',
     baseHp:460, baseDmg:35, attackRange:540, moveSpeed:325, physResist:30, magicResist:28,
     lore:'A fire archer who leads with her feet. Dash in, burn everything, dash out.',
     abilities:{
@@ -222,7 +222,7 @@ const CHAMPIONS = {
 
   // Maokai-inspired: CC everywhere, sapling toss, lane-wide root ult
   'Bogveil': {
-    class:'Tank', compType:'ENGAGE', role:'vanguard',
+    class:'Tank', compType:'ENGAGE', role:'top',
     baseHp:720, baseDmg:20, attackRange:45, moveSpeed:295, physResist:80, magicResist:52,
     lore:'A twisted ancient tree warped by Grove corruption. Every branch is a weapon.',
     abilities:{
@@ -238,7 +238,7 @@ const CHAMPIONS = {
 
   // Ornn-inspired: forge terrain wall, unstoppable charge ult
   'Ironsong': {
-    class:'Tank', compType:'SCALING', role:'vanguard',
+    class:'Tank', compType:'SCALING', role:'top',
     baseHp:750, baseDmg:18, attackRange:45, moveSpeed:290, physResist:85, magicResist:58,
     lore:'An ancient forge-guardian. Slow to anger, impossible to stop once moving.',
     abilities:{
@@ -254,7 +254,7 @@ const CHAMPIONS = {
 
   // Jarvan IV-inspired: combo knockdown, arena cage ult
   'Thornwall': {
-    class:'Tank', compType:'ENGAGE', role:'vanguard',
+    class:'Tank', compType:'ENGAGE', role:'top',
     baseHp:700, baseDmg:22, attackRange:45, moveSpeed:300, physResist:78, magicResist:50,
     lore:'The indomitable knight of the Grove. His ult creates an arena none can escape.',
     abilities:{
@@ -269,7 +269,7 @@ const CHAMPIONS = {
   },
 
   'Deeproot': {
-    class:'Tank', compType:'ENGAGE', role:'vanguard',
+    class:'Tank', compType:'ENGAGE', role:'top',
     baseHp:690, baseDmg:20, attackRange:45, moveSpeed:295, physResist:78, magicResist:52,
     lore:'A primordial root-guardian. The earth itself rises to protect the Grove.',
     abilities:{
@@ -284,7 +284,7 @@ const CHAMPIONS = {
   },
 
   'Ironbark': {
-    class:'Tank', compType:'ENGAGE', role:'vanguard',
+    class:'Tank', compType:'ENGAGE', role:'top',
     baseHp:710, baseDmg:18, attackRange:45, moveSpeed:295, physResist:82, magicResist:55,
     lore:'An iron-bark colossus. Stands immovable and reflects the fury of his attackers.',
     abilities:{
@@ -304,7 +304,7 @@ const CHAMPIONS = {
 
   // Pantheon-inspired: poke, shield stun, drop-from-sky ult
   'Stoneguard': {
-    class:'Fighter', compType:'ENGAGE', role:'vanguard',
+    class:'Fighter', compType:'ENGAGE', role:'top',
     baseHp:610, baseDmg:30, attackRange:125, moveSpeed:330, physResist:62, magicResist:35,
     lore:'A spear warrior chosen by the Grove itself. His ult falls from the heavens onto his enemies.',
     abilities:{
@@ -320,7 +320,7 @@ const CHAMPIONS = {
 
   // Volibear-inspired: lightning bear, mixed damage, disables structures
   'Stormhide': {
-    class:'Fighter', compType:'ENGAGE', role:'vanguard',
+    class:'Fighter', compType:'ENGAGE', role:'top',
     baseHp:650, baseDmg:28, attackRange:55, moveSpeed:335, physResist:65, magicResist:40,
     lore:'A living storm given bear-form. When his ult activates, even the Roots go silent.',
     abilities:{
@@ -335,7 +335,7 @@ const CHAMPIONS = {
   },
 
   'Thornback': {
-    class:'Fighter', compType:'ENGAGE', role:'vanguard',
+    class:'Fighter', compType:'ENGAGE', role:'top',
     baseHp:600, baseDmg:28, attackRange:45, moveSpeed:325, physResist:60, magicResist:35,
     lore:'A berserker who shrugs off CC and charges into the heart of every fight.',
     abilities:{
@@ -349,7 +349,7 @@ const CHAMPIONS = {
   },
 
   'Sylvara': {
-    class:'Fighter', compType:'SPLITPUSH', role:'vanguard',
+    class:'Fighter', compType:'SPLITPUSH', role:'top',
     baseHp:570, baseDmg:32, attackRange:50, moveSpeed:345, physResist:60, magicResist:32,
     lore:'A duelist who kills objectives and champions alike. Fastest split-pusher in the game.',
     abilities:{
@@ -364,7 +364,7 @@ const CHAMPIONS = {
   },
 
   'Briarvex': {
-    class:'Fighter', compType:'ENGAGE', role:'vanguard',
+    class:'Fighter', compType:'ENGAGE', role:'top',
     baseHp:590, baseDmg:30, attackRange:50, moveSpeed:330, physResist:58, magicResist:33,
     lore:'A briar-armoured brawler. His ult makes him untouchable for 4 seconds of pure carnage.',
     abilities:{
@@ -383,7 +383,7 @@ const CHAMPIONS = {
   // ══════════════════════════════════════════════════════════════════════
 
   'Shade': {
-    class:'Assassin', compType:'ASSASSIN', role:'arcanist',
+    class:'Assassin', compType:'ASSASSIN', role:'mid',
     baseHp:380, baseDmg:38, attackRange:60, moveSpeed:355, physResist:30, magicResist:28,
     lore:'A shadow that moves between worlds. You only hear it when it has already won.',
     abilities:{
@@ -398,7 +398,7 @@ const CHAMPIONS = {
   },
 
   'Hexwing': {
-    class:'Assassin', compType:'ASSASSIN', role:'ranger',
+    class:'Assassin', compType:'ASSASSIN', role:'jungle',
     baseHp:370, baseDmg:40, attackRange:80, moveSpeed:350, physResist:30, magicResist:27,
     lore:'An aerial assassin that dives from above. High-risk, high-reward jungle predator.',
     abilities:{
@@ -413,7 +413,7 @@ const CHAMPIONS = {
   },
 
   'Fangwhisper': {
-    class:'Assassin', compType:'ASSASSIN', role:'ranger',
+    class:'Assassin', compType:'ASSASSIN', role:'jungle',
     baseHp:385, baseDmg:37, attackRange:65, moveSpeed:350, physResist:30, magicResist:27,
     lore:'A venomous predator. Stack enough poison and the target cannot run.',
     abilities:{
@@ -428,7 +428,7 @@ const CHAMPIONS = {
   },
 
   'Driftblade': {
-    class:'Assassin', compType:'SPLITPUSH', role:'arcanist',
+    class:'Assassin', compType:'SPLITPUSH', role:'mid',
     baseHp:375, baseDmg:36, attackRange:70, moveSpeed:360, physResist:30, magicResist:28,
     lore:'A wind-dancer who never stops moving. Her ult shreds everything in her path.',
     abilities:{
@@ -448,7 +448,7 @@ const CHAMPIONS = {
 
   // Morgana-inspired: long root, vamp pool, soul chain ult (MUST INCLUDE)
   'Darkblossom': {
-    class:'Sentinel', compType:'PROTECT', role:'warden',
+    class:'Sentinel', compType:'PROTECT', role:'support',
     baseHp:490, baseDmg:22, attackRange:540, moveSpeed:305, physResist:38, magicResist:50,
     lore:'A corrupted sentinel warped by dark magic. Her root is the longest in the game. Her ult chains their souls.',
     abilities:{
@@ -464,7 +464,7 @@ const CHAMPIONS = {
 
   // Blitzcrank-inspired: long-range pull hook, power fist ult
   'Irongrasp': {
-    class:'Sentinel', compType:'ENGAGE', role:'warden',
+    class:'Sentinel', compType:'ENGAGE', role:'support',
     baseHp:500, baseDmg:22, attackRange:140, moveSpeed:315, physResist:42, magicResist:48,
     lore:'A steam-powered golem. One hook and the fight is over before it begins.',
     abilities:{
@@ -480,7 +480,7 @@ const CHAMPIONS = {
 
   // Braum-inspired: projectile-blocking shield wall, knockup ult
   'Stonewall': {
-    class:'Sentinel', compType:'PROTECT', role:'warden',
+    class:'Sentinel', compType:'PROTECT', role:'support',
     baseHp:510, baseDmg:20, attackRange:120, moveSpeed:310, physResist:44, magicResist:50,
     lore:'A mountain given form. His shield stops projectiles dead. His ult splits the earth.',
     abilities:{
@@ -496,7 +496,7 @@ const CHAMPIONS = {
 
   // Nami/Lulu-inspired: heal+buff ally, knockup ult
   'Tidecaller': {
-    class:'Sentinel', compType:'PROTECT', role:'warden',
+    class:'Sentinel', compType:'PROTECT', role:'support',
     baseHp:470, baseDmg:20, attackRange:550, moveSpeed:305, physResist:36, magicResist:50,
     lore:'A tide-spirit who lifts allies and drowns enemies. The team plays better when she is near.',
     abilities:{
@@ -512,7 +512,7 @@ const CHAMPIONS = {
 
   // Thresh-inspired: lantern ally-dash, cage ult
   'Gravewarden': {
-    class:'Sentinel', compType:'ENGAGE', role:'warden',
+    class:'Sentinel', compType:'ENGAGE', role:'support',
     baseHp:495, baseDmg:22, attackRange:460, moveSpeed:310, physResist:40, magicResist:48,
     lore:'A soul-collector who offers salvation or damnation. His cage catches what his chain misses.',
     abilities:{

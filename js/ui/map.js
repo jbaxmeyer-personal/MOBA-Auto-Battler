@@ -5,23 +5,23 @@
 (function () {
   'use strict';
 
-  const POSITIONS = ['vanguard', 'ranger', 'arcanist', 'hunter', 'warden'];
+  const POSITIONS = ['top', 'jungle', 'mid', 'adc', 'support'];
 
   let _skipMode = false;
   let _ringRaf  = null;
 
   // Spawn positions matching SPAWN constants in simulation.js
   const _SPAWN_POS = {
-    blue: { vanguard:{x:22,y:278}, ranger:{x:27,y:273}, arcanist:{x:24,y:276},
-            hunter:{x:19,y:274},   warden:{x:16,y:270} },
-    red:  { vanguard:{x:278,y:22}, ranger:{x:273,y:27}, arcanist:{x:276,y:24},
-            hunter:{x:281,y:26},   warden:{x:284,y:30} },
+    blue: { top:{x:22,y:278}, jungle:{x:27,y:273}, mid:{x:24,y:276},
+            adc:{x:19,y:274},  support:{x:16,y:270} },
+    red:  { top:{x:278,y:22}, jungle:{x:273,y:27}, mid:{x:276,y:24},
+            adc:{x:281,y:26},  support:{x:284,y:30} },
   };
 
   // Dead status per champion
   const _dead = {
-    blue: { vanguard:false, ranger:false, arcanist:false, hunter:false, warden:false },
-    red:  { vanguard:false, ranger:false, arcanist:false, hunter:false, warden:false },
+    blue: { top:false, jungle:false, mid:false, adc:false, support:false },
+    red:  { top:false, jungle:false, mid:false, adc:false, support:false },
   };
 
   // ── Public API ───────────────────────────────────────────────────────────────

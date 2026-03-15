@@ -540,7 +540,7 @@ function _updateMatchScore(bK, rK, bShr, rShr, bRt, rRt, adv) {
 }
 
 function _buildKDATable(players, color) {
-  const POS_ICON = { vanguard:'⚔️', ranger:'🌲', arcanist:'✨', hunter:'🏹', warden:'🛡️' };
+  const POS_ICON = { top:'⚔️', jungle:'🌿', mid:'✦', adc:'🏹', support:'🛡️' };
   const rows = players.map(p => `
     <tr>
       <td style="color:${color};font-size:11px;padding:2px 6px 2px 0">${POS_ICON[p.pos]||''} ${_escHtml(p.name)}</td>
@@ -756,11 +756,11 @@ function _finalizeDraft() {
 
 function _cpuAssignRoles(picks, rosterArr) {
   const ROLE_CLASS_FIT = {
-    vanguard:  ['tank','fighter'],
-    ranger:    ['assassin','fighter'],
-    arcanist:  ['mage'],
-    hunter:    ['marksman'],
-    warden:    ['sentinel'],
+    top:     ['tank','fighter'],
+    jungle:  ['assassin','fighter'],
+    mid:     ['mage'],
+    adc:     ['marksman'],
+    support: ['sentinel'],
   };
   const used = new Set();
   return POSITIONS.map((pos, i) => {
