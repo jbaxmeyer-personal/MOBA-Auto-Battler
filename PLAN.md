@@ -15,7 +15,7 @@
 | Balance & Polish (Phase 8) | Meta system, UI polish, playtesting — not started |
 | Visual Identity (Phase 10) | Pixel-art sprites on map; long-term: isometric PixiJS view |
 | ~~Phase 12A — Scouting Depth~~ | ✅ DONE |
-| Phase 12B — AI Manager Behaviour | CPU facilities, virtual staff, tactical adaptation, offseason roster moves |
+| ~~Phase 12B — AI Manager Behaviour~~ | ✅ DONE |
 | Phase 12C — Contract Negotiations | Counter-offers, player rejection, bidding wars |
 | Phase 12D — Transfer Market | Transfer fees, CPU team transactions, transfer listing, loans |
 | Phase 12E — Fan Events Cooldown UX | 8-week event calendar timeline in Fans panel |
@@ -1029,7 +1029,7 @@ G.teams[humanTeamId].tactics = {
 
 ---
 
-### 12B — AI Manager Behaviour
+### 12B — AI Manager Behaviour ✅ DONE
 
 **Problem:** CPU teams are just stat bags. They never upgrade facilities, hire staff, adjust tactics, or react to their roster situation.
 

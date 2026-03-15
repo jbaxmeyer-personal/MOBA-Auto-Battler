@@ -97,6 +97,16 @@ const TACTICS_COMP_PRESETS = {
   SPLITPUSH: { laneFocus:'top_mid', jungleStyle:'farm',    wardenCall:'concede',  topJoinWarden:'never',    objectiveSetup:'split',    combatStrategy:'bait',   wardenBuff:'1-3-1',   ancientSiege:'poke', defensiveTactics:'defend' },
 };
 
+// ─── AI Manager Personalities ────────────────────────────────────────────────
+
+const AI_PERSONALITIES = {
+  aggressive:   { facilitySpendMult: 1.4, rosterTurnover: 0.3, tacticsAdapt: 0.7 },
+  balanced:     { facilitySpendMult: 1.0, rosterTurnover: 0.2, tacticsAdapt: 0.5 },
+  conservative: { facilitySpendMult: 0.6, rosterTurnover: 0.1, tacticsAdapt: 0.3 },
+};
+
+const AI_PERSONALITY_KEYS = ['aggressive', 'balanced', 'conservative'];
+
 function delegateToAnalyst(humanCompType, enemyCompType) {
   if (!G) return;
   const team = G.teams[G.humanTeamId];
@@ -660,10 +670,16 @@ function initGame(humanTeamId) {
     const roster  = PLAYER_DB.filter(p => p.teamId === td.id && !isAcademy(p, td.id));
     const academy = PLAYER_DB.filter(p => p.teamId === td.id &&  isAcademy(p, td.id));
 
+    const aiPersonality = td.id === humanTeamId ? null : AI_PERSONALITY_KEYS[Math.floor(Math.random() * 3)];
+    const staffQuality  = td.id === humanTeamId ? null
+      : Math.max(2, Math.min(10, Math.round(td.prestige * 0.9 + Math.random() * 2)));
+
     teams[td.id] = {
       ...td,
       isHuman: td.id === humanTeamId,
       wins: 0, losses: 0, points: 0,
+      aiPersonality,
+      staffQuality,
       // Starting roster: best player at each position
       roster:  buildStartingLineup(td.id),
       academy: academy.map(p => p.id),
@@ -845,6 +861,29 @@ function advanceWeek() {
   matchWeek.forEach(m => {
     if (!m.played && !(m.homeId === G.humanTeamId || m.awayId === G.humanTeamId)) {
       simulateAIMatch(m);
+    }
+  });
+
+  // CPU facility investments (~10% chance per CPU team per week)
+  Object.values(G.teams).forEach(t => {
+    if (t.id === G.humanTeamId) return;
+    if (Math.random() > 0.10) return;
+    const personality = AI_PERSONALITIES[t.aiPersonality || 'balanced'];
+    const upgradeable = Object.entries(t.facilities || {}).filter(([key, fac]) => {
+      const def = FACILITY_DEFS[key];
+      if (!def) return false;
+      const level = typeof fac === 'number' ? fac : (fac?.level || 1);
+      return level < def.maxLevel;
+    });
+    if (!upgradeable.length) return;
+    const [key, fac] = upgradeable[Math.floor(Math.random() * upgradeable.length)];
+    const level = typeof fac === 'number' ? fac : (fac?.level || 1);
+    const upgCost = FACILITY_DEFS[key].costs[level] || 0;
+    if (!upgCost) return;
+    const threshold = upgCost * 2 / personality.facilitySpendMult;
+    if (t.budget >= threshold) {
+      t.budget -= upgCost;
+      t.facilities[key] = typeof fac === 'number' ? (level + 1) : { ...fac, level: level + 1 };
     }
   });
 
@@ -1447,23 +1486,28 @@ function processPlayerDevelopment() {
     if (!p) return;
     const moraleBonus = p.morale > 7 ? 1.5 : p.morale < 4 ? 0.5 : 1;
 
+    // Staff quality bonus for AI teams
+    const team = p.teamId ? G.teams[p.teamId] : null;
+    const staffQualityMult = (team && team.staffQuality)
+      ? 1 + (team.staffQuality - 5) * 0.04   // sq=10 → +20%, sq=2 → -12%
+      : 1;
+
     // Young players (<22): chance to improve (head coach + youth_mentor trait boosts rate)
     if (p.age < 22) {
-      const coachBonus  = getStaffBonus('headcoach');
-      const mentorBonus = hasManagerTrait('youth_mentor') ? 0.5 : 0;
+      const coachBonus  = p.teamId === G.humanTeamId ? getStaffBonus('headcoach') : 0;
+      const mentorBonus = p.teamId === G.humanTeamId && hasManagerTrait('youth_mentor') ? 0.5 : 0;
       const allStats = Object.keys(p.stats);
-      if (Math.random() < (0.08 + coachBonus * 0.5 + mentorBonus) * moraleBonus) {
+      if (Math.random() < (0.08 + coachBonus * 0.5 + mentorBonus) * moraleBonus * staffQualityMult) {
         const stat = allStats[Math.floor(Math.random()*allStats.length)];
         const old = p.stats[stat];
         p.stats[stat] = Math.min(20, p.stats[stat] + 1);
-        // Grant XP for developing a player
         if (p.stats[stat] > old && p.teamId === G.humanTeamId) grantManagerXP(5, null);
       }
     }
 
     // Veterans (>28): slight chance to decline (veteran_handler halves it)
     if (p.age > 28) {
-      const declineChance = hasManagerTrait('veteran_handler') ? 0.02 : 0.04;
+      const declineChance = p.teamId === G.humanTeamId && hasManagerTrait('veteran_handler') ? 0.02 : 0.04;
       const allStats = Object.keys(p.stats);
       if (Math.random() < declineChance) {
         const stat = allStats[Math.floor(Math.random()*allStats.length)];
@@ -1473,8 +1517,69 @@ function processPlayerDevelopment() {
   });
 }
 
+// ─── AI Offseason Roster Management ──────────────────────────────────────────
+
+function aiOffseasonRosterMoves() {
+  Object.values(G.teams).forEach(t => {
+    if (t.id === G.humanTeamId) return;
+    const personality = AI_PERSONALITIES[t.aiPersonality || 'balanced'];
+
+    // Release low-quality or expiring-contract players with bad morale
+    POSITIONS.forEach(pos => {
+      const pid = t.roster[pos];
+      if (!pid) return;
+      const p = G.players[pid];
+      if (!p) return;
+      const ovr = calcOverall(p);
+      const contractExpiring = p.contract.yearsLeft <= 0;
+      const lowQuality = ovr < 55;
+      const lowMorale  = p.morale < 4;
+      if ((contractExpiring && (lowQuality || lowMorale)) ||
+          (lowQuality && Math.random() < personality.rosterTurnover)) {
+        t.roster[pos] = null;
+        p.teamId = null;
+        if (!G.freeAgents.includes(pid)) G.freeAgents.push(pid);
+        addNews(`${t.name} has released ${p.name} (${posLabel(pos)}).`, 'info');
+      }
+    });
+
+    // Sign free agents to fill empty slots
+    POSITIONS.forEach(pos => {
+      if (t.roster[pos]) return;
+      const candidates = G.freeAgents.filter(fid => {
+        const p = G.players[fid];
+        return p && p.position === pos;
+      });
+      if (!candidates.length) return;
+      candidates.sort((a, b) => calcOverall(G.players[b]) - calcOverall(G.players[a]));
+      const signId = candidates[0];
+      const p = G.players[signId];
+      if (t.budget < p.contract.salary * 4) return; // rough affordability check
+      t.roster[pos] = signId;
+      p.teamId = t.id;
+      G.freeAgents = G.freeAgents.filter(id => id !== signId);
+      addNews(`${t.name} has signed ${p.name} (${posLabel(pos)}).`, 'info');
+    });
+  });
+}
+
 function getWeekMatches(week) {
   return G.season.schedule.filter(m => m.week === week);
+}
+
+function _aiAdaptTactics(team) {
+  const dims = Object.keys(TACTICS_DEFS);
+  // Change 1-2 tactic dimensions
+  const changeCount = Math.random() < 0.4 ? 2 : 1;
+  for (let i = 0; i < changeCount; i++) {
+    const dim = dims[Math.floor(Math.random() * dims.length)];
+    const options = Object.keys(TACTICS_DEFS[dim].options);
+    team.tactics[dim] = options[Math.floor(Math.random() * options.length)];
+  }
+  // Occasionally change playstyle
+  if (Math.random() < 0.25) {
+    team.tactics.playstyle = randomPlaystyle();
+  }
 }
 
 function simulateAIMatch(match) {
@@ -1491,6 +1596,17 @@ function simulateAIMatch(match) {
     const r = quickSimulateMatch(homePlayers, awayPlayers);
     if (r === 'blue') homeWins++; else awayWins++;
     match.games.push({ winner: r === 'blue' ? match.homeId : match.awayId });
+
+    // Tactical adaptation: losing team may adjust tactics mid-series
+    const justLostId   = r === 'blue' ? match.awayId : match.homeId;
+    const justLostTeam = G.teams[justLostId];
+    if (justLostTeam && justLostTeam.aiPersonality) {
+      const pers      = AI_PERSONALITIES[justLostTeam.aiPersonality];
+      const sqMult    = (justLostTeam.staffQuality || 5) / 10;
+      if (Math.random() < pers.tacticsAdapt * sqMult) {
+        _aiAdaptTactics(justLostTeam);
+      }
+    }
   }
 
   const homeWon = homeWins > awayWins;
@@ -1557,6 +1673,7 @@ function _advancePlayoffs() {
     addNews(`${champ.name} are the ${G.season.split === 'spring' ? 'Spring' : 'Summer'} Split ${G.season.year} Champions!`, 'match');
     G.season.phase = 'offseason';
     G.season.champion = gf.result.winnerId;
+    aiOffseasonRosterMoves();
   }
 }
 
