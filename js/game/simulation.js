@@ -1068,6 +1068,8 @@ function agentStatsMap(agents) {
       assists: ag.assists || 0,
       cs:      ag.cs      || 0,
       gold:    Math.round(ag.gold || 0),
+      hp:      ag.isDead ? 0 : Math.round(ag.hp || 0),
+      maxHp:   Math.round(ag.maxHp || 1),
       isDead:  !!ag.isDead,
       level:   ag.level   || 1,
       items:   [...(ag.items || [])],

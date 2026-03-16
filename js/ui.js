@@ -1398,8 +1398,6 @@ function updateLiveStats(agentStats) {
         hpEl.style.width = (pct * 100).toFixed(1) + '%';
         hpEl.classList.toggle('hp-yellow', pct < 0.6 && pct >= 0.3);
         hpEl.classList.toggle('hp-red',    pct < 0.3);
-        hpEl.classList.remove(pct >= 0.6 ? 'hp-yellow' : '', pct >= 0.3 ? 'hp-red' : '');
-        if (pct >= 0.6) { hpEl.classList.remove('hp-yellow','hp-red'); }
       }
     });
   });

@@ -168,7 +168,7 @@ function onStartMatch() {
   document.getElementById('draft-phase').style.display   = 'none';
   document.getElementById('role-assignment-phase').style.display = 'none';
   document.getElementById('tactics-phase').style.display = 'none';
-  document.getElementById('pbp-container').style.display = 'block';
+  document.getElementById('pbp-container').style.display = 'flex';
   document.getElementById('pbp-results').style.display   = 'none';
   document.getElementById('pbp-events').innerHTML        = '';
 
@@ -203,7 +203,7 @@ function onSkipMatch() {
   document.getElementById('draft-phase').style.display   = 'none';
   document.getElementById('role-assignment-phase').style.display = 'none';
   document.getElementById('tactics-phase').style.display = 'none';
-  document.getElementById('pbp-container').style.display = 'block';
+  document.getElementById('pbp-container').style.display = 'flex';
   if (typeof initLiveStats === 'function' && draft) {
     initLiveStats(draft, blueName, redName);
   }
@@ -453,6 +453,7 @@ let _pbpPaused    = false;
 function pbpSpeed(mult) {
   _pbpSpeedMult = mult;
   _pbpPaused    = false;
+  if (typeof setMapTickMs === 'function') setMapTickMs(Math.round(PBP_BASE_DELAY / mult));
   document.querySelectorAll('.pbp-speed-btn[id^="pbp-btn-"]').forEach(b => b.classList.remove('pbp-speed-active'));
   const btn = document.getElementById(`pbp-btn-${mult}x`);
   if (btn) btn.classList.add('pbp-speed-active');
