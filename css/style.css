@@ -587,7 +587,7 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 .kda-table td:nth-child(4) { color: #e74c3c; }                    /* D red */
 .kda-table td:nth-child(5) { color: #4fc3f7; }                    /* A blue */
 
-/* ── PBP Layout (TFM2-style: side panels + large center map + bottom feed) ── */
+/* ── PBP Layout ─────────────────────────────────────────────────────────────── */
 .pbp-container {
   display: flex;
   flex-direction: column;
@@ -596,7 +596,6 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
   overflow: hidden;
   position: relative;
 }
-/* Three-column row: blue panel | map | red panel */
 .pbp-main {
   display: flex;
   flex: 1;
@@ -605,7 +604,7 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 }
 /* Side stat panels */
 .pbp-side-panel {
-  width: 240px;
+  width: 200px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -615,6 +614,23 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
 }
 .pbp-side-blue { border-right: 1px solid #1a3050; }
 .pbp-side-red  { border-left:  1px solid #501a1a; }
+/* Camera column: center flex:1 with camera view + bottom strip */
+.pbp-camera-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pbp-camera-wrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+  background: #080e08;
+}
 .lsp-panel-header {
   font-size: 11px;
   font-weight: 700;
@@ -627,53 +643,89 @@ button{cursor:pointer;border:none;outline:none;font-family:inherit;}
   top: 0;
   z-index: 1;
 }
-/* Center: map fills available space */
-.pbp-center {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px 4px 8px;
-  overflow: hidden;
-  background: #080e08;
-}
-.pbp-map-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  overflow: hidden;
-}
+/* Camera SVG: fills the camera-wrap completely */
 .pbp-map-svg {
-  /* Sized by width:100% of container, height auto via aspect-ratio.
-     max-height/max-width clamp the square to fit in the viewport height.
-     52 header + 130 bottom + 10 padding + 80 legend/chart = 272 → use 290 with buffer. */
   width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  max-height: calc(100vh - 290px);
-  max-width: calc(100vh - 290px);
-  min-height: 0;
-  border-radius: 8px;
-  border: 1px solid #1e3a1e;
+  height: 100%;
   display: block;
 }
-/* Bottom bar: speed controls + event feed */
-.pbp-bottom {
+/* Right column: red panel + minimap */
+.pbp-right-col {
+  width: 200px;
+  flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 5px 8px;
-  border-top: 1px solid #1a2a1a;
-  background: #070d07;
+  flex-direction: column;
+  border-left: 1px solid #501a1a;
+  overflow: hidden;
+}
+.pbp-right-col .pbp-side-panel {
+  flex: 1;
+  border-left: none;
+  width: 100%;
+}
+.pbp-minimap-wrap {
+  height: 196px;
+  flex-shrink: 0;
+  border-top: 1px solid #2a1a1a;
+  background: #060e06;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pbp-minimap {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Bottom strip: matchup + events */
+.pbp-bottom-strip {
+  display: flex;
   height: 130px;
   flex-shrink: 0;
+  border-top: 1px solid #1a2a1a;
+  background: #070d07;
   overflow: hidden;
+}
+.pbp-matchup {
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid #1a2a1a;
+  padding: 5px 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pbp-matchup-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 3px;
+  flex-shrink: 0;
+}
+.pbp-mu-row {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  padding: 1px 0;
+  border-bottom: 1px solid #0d1a0d;
+  gap: 2px;
+}
+.pbp-mu-blue { flex: 1; text-align: right; color: #4fc3f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbp-mu-red  { flex: 1; text-align: left;  color: #ff7b7b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbp-mu-role { width: 28px; text-align: center; font-weight: 700; font-size: 9px; color: #6a8a6a; flex-shrink: 0; }
+.pbp-mu-kda  { font-size: 9px; color: var(--text-dim); }
+.pbp-mu-gold { color: var(--gold); font-size: 9px; }
+.pbp-mu-dead { opacity: 0.35; }
+.pbp-events-section {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  padding: 5px 8px;
+  overflow: hidden;
+  align-items: flex-start;
 }
 .pbp-controls {
   display: flex;

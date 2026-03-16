@@ -9,6 +9,8 @@
 
   let _skipMode = false;
   let _ringRaf  = null;
+  let _cameraW = 90; // viewport width in map units, computed from display aspect
+  let _cameraH = 90; // viewport height
 
   // Spawn positions matching SPAWN constants in simulation.js
   const _SPAWN_POS = {
@@ -87,6 +89,8 @@
         }
       });
     });
+    // Update camera viewBox to follow action
+    _updateCamera(positions);
   }
 
   // ── Objective HP ─────────────────────────────────────────────────────────────
@@ -107,6 +111,9 @@
       // Grey out destroyed structures
       const struct = document.getElementById(`obj-${o.id}`);
       if (struct) struct.classList.toggle('map-obj-dead', !!(o.destroyed || o.tempDown));
+      // Sync minimap tower visibility
+      const mmObj = document.getElementById(`mm-obj-${o.id}`);
+      if (mmObj) mmObj.setAttribute('opacity', (o.destroyed || o.tempDown) ? '0.1' : '0.8');
     });
   }
 
@@ -115,9 +122,9 @@
   function flashForEvent(ev) {
     let cx, cy, color;
     if (ev.wardenBlue !== undefined || ev.wardenRed !== undefined) {
-      cx = 150; cy = 125; color = '#9b59b6';
+      cx = 235; cy = 235; color = '#9b59b6';
     } else if (ev.shrineBlue !== undefined || ev.shrineRed !== undefined) {
-      cx = 150; cy = 150; color = '#c89b3c';
+      cx = 65; cy = 65; color = '#c89b3c';
     } else if (ev.type === 'result') {
       const blueWon = (ev.advAfter || 50) >= 50;
       cx = blueWon ? 35  : 265;
@@ -171,6 +178,9 @@
     const pfx = side[0];
     const grp = document.getElementById(`map-g-${pfx}-${pos}`);
     if (grp) grp.setAttribute('transform', `translate(${x},${y})`);
+    // Sync minimap dot
+    const mm = document.getElementById(`mm-${pfx}-${pos}`);
+    if (mm) { mm.setAttribute('cx', x); mm.setAttribute('cy', y); }
   }
 
   function updateHpRing(side, pos, hpPct) {
@@ -188,12 +198,38 @@
     const pfx = side[0];
     const grp = document.getElementById(`map-g-${pfx}-${pos}`);
     if (grp) grp.classList.add('map-dot-dead');
+    const mm = document.getElementById(`mm-${pfx}-${pos}`);
+    if (mm) mm.setAttribute('opacity', '0.2');
   }
 
   function reviveDot(side, pos) {
     const pfx = side[0];
     const grp = document.getElementById(`map-g-${pfx}-${pos}`);
     if (grp) grp.classList.remove('map-dot-dead');
+    const mm = document.getElementById(`mm-${pfx}-${pos}`);
+    if (mm) mm.setAttribute('opacity', '0.9');
+  }
+
+  function _updateCamera(positions) {
+    const svg = document.getElementById('pbp-map-svg');
+    if (!svg || _skipMode) return;
+    const c = getCentroid(positions);
+    // Compute display aspect ratio
+    const rect = svg.getBoundingClientRect();
+    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
+    const zoomH = 90;
+    const zoomW = zoomH * aspect;
+    const vx = Math.max(0, Math.min(300 - zoomW, c.x - zoomW / 2));
+    const vy = Math.max(0, Math.min(300 - zoomH, c.y - zoomH / 2));
+    svg.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${zoomW.toFixed(1)} ${zoomH.toFixed(1)}`);
+    // Update minimap camera rect
+    const camRect = document.getElementById('mm-camera-rect');
+    if (camRect) {
+      camRect.setAttribute('x', vx.toFixed(1));
+      camRect.setAttribute('y', vy.toFixed(1));
+      camRect.setAttribute('width', zoomW.toFixed(1));
+      camRect.setAttribute('height', zoomH.toFixed(1));
+    }
   }
 
 })();

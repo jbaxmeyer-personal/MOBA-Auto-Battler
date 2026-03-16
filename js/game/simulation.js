@@ -115,8 +115,8 @@ const OBJ_DEFS = [
   { id:'r_ancient',side:'red',     type:'ancient', x:278, y: 22, maxHp:12000, atkDmg:25, atkRange:36 },
   // ── Neutral objectives ──────────────────────────────────────────────────────
   // Neutral objectives: Shrine (Dragon-side, bot lane river) and Warden (Baron-side, top lane river)
-  { id:'shrine',   side:'neutral', type:'shrine',  x:115, y:185, maxHp: 2000, atkDmg: 0, atkRange: 0 },
-  { id:'warden',   side:'neutral', type:'warden',  x:185, y:115, maxHp: 5000, atkDmg: 6, atkRange:28 },
+  { id:'shrine',   side:'neutral', type:'shrine',  x: 65, y: 65, maxHp: 2000, atkDmg: 0, atkRange: 0 },
+  { id:'warden',   side:'neutral', type:'warden',  x:235, y:235, maxHp: 5000, atkDmg: 6, atkRange:28 },
 ];
 
 // Jungle camps

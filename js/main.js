@@ -494,6 +494,7 @@ function startPBP(events) {
       _appendPBPEvent(ev, feedEl);
     }
     if (ev.agentStats && typeof updateLiveStats === 'function') updateLiveStats(ev.agentStats);
+    if (ev.agentStats) _updateMatchup(ev.agentStats);
     // Live gold chart: update progressively each tick
     if (ev.tick !== undefined && _matchResult?.goldSnapshots) {
       _drawGoldChart(_matchResult.goldSnapshots.slice(0, ev.tick + 1));
@@ -573,6 +574,35 @@ function _updateMatchScore(bK, rK, bShr, rShr, bRt, rRt, adv) {
   setText('score-red-roots',    `${rRt||0}`);
   const fill = document.getElementById('advantage-fill');
   if (fill) fill.style.width = `${adv ?? 50}%`;
+}
+
+// ─── Champion Matchup Section ─────────────────────────────────────────────────
+
+function _updateMatchup(agentStats) {
+  const el = document.getElementById('pbp-matchup-rows');
+  if (!el || !_matchContext) return;
+  const { blueRoster, redRoster } = _matchContext;
+  const roles = ['top','jungle','mid','adc','support'];
+  const rlbl = { top:'TOP', jungle:'JGL', mid:'MID', adc:'ADC', support:'SUP' };
+  let html = '';
+  for (const role of roles) {
+    const bs = agentStats?.blue?.[role] || {};
+    const rs = agentStats?.red?.[role]  || {};
+    const bp = blueRoster?.find(p => p.role === role);
+    const rp = redRoster?.find(p => p.role === role);
+    const bKda  = `${bs.kills||0}/${bs.deaths||0}/${bs.assists||0}`;
+    const rKda  = `${rs.kills||0}/${rs.deaths||0}/${rs.assists||0}`;
+    const bGold = ((bs.gold||0)/1000).toFixed(1)+'K';
+    const rGold = ((rs.gold||0)/1000).toFixed(1)+'K';
+    const bCls  = bs.isDead ? ' pbp-mu-dead' : '';
+    const rCls  = rs.isDead ? ' pbp-mu-dead' : '';
+    html += `<div class="pbp-mu-row">
+      <span class="pbp-mu-blue${bCls}">${bp?.name||'?'}&nbsp;<span class="pbp-mu-kda">${bKda}</span>&nbsp;<span class="pbp-mu-gold">${bGold}</span></span>
+      <span class="pbp-mu-role">${rlbl[role]}</span>
+      <span class="pbp-mu-red${rCls}"><span class="pbp-mu-gold">${rGold}</span>&nbsp;<span class="pbp-mu-kda">${rKda}</span>&nbsp;${rp?.name||'?'}</span>
+    </div>`;
+  }
+  el.innerHTML = html;
 }
 
 // ─── Live Scoreboard ──────────────────────────────────────────────────────────
