@@ -32,13 +32,14 @@
     { sx:192, sy: 128, sw: 48, sh: 112 },  // slim tree
   ];
 
-  // Pixel Crawler tree config (tree1.png: 368x256)
-  // Model 01 has 4 columns of tree variants (green x2, autumn x2), 2 rows
-  // Each tree sprite is roughly 92x128
+  // Pixel Crawler tree config
+  // tree1.png (368x256): 4 cols x 2 rows, each sprite ~92x128
+  // tree2.png (192x224): 3 cols x 2 rows, each sprite ~64x112
+  // Display size is fixed in canvas pixels regardless of camera zoom
   var PC_TREES = [
-    { img:'tree1', sx:  0, sy:  0, sw: 92, sh:128 },  // green tree A
-    { img:'tree1', sx: 92, sy:  0, sw: 92, sh:128 },  // green tree B
-    { img:'tree2', sx:  0, sy:  0, sw: 64, sh:112 },  // model 2 tree
+    { img:'tree1', sx:  0, sy:  0, sw: 92, sh:128, dispW:36, dispH:48 }, // green A
+    { img:'tree1', sx: 92, sy:  0, sw: 92, sh:128, dispW:36, dispH:48 }, // green B
+    { img:'tree2', sx:  0, sy:  0, sw: 64, sh:112, dispW:30, dispH:44 }, // model 2
   ];
 
   // ── Champion → sprite mapping ─────────────────────────────────────────────
@@ -208,7 +209,7 @@
 
   function _buildForestTrees() {
     _forestTrees = [];
-    var spacing = 12;
+    var spacing = 20;
     for (var my = 20; my < 280; my += spacing) {
       for (var mx = 20; mx < 280; mx += spacing) {
         var ttype = (typeof getTileType === 'function') ? getTileType(mx, my) : 4;
@@ -308,8 +309,8 @@
       var img = ASSETS[pc.img];
       if (!img) continue;
 
-      var dispH = Math.round(pc.sh * scaleX() * t.sz * 0.55);
-      var dispW = Math.round(pc.sw * scaleX() * t.sz * 0.55);
+      var dispW = Math.round(pc.dispW * t.sz);
+      var dispH = Math.round(pc.dispH * t.sz);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, pc.sx, pc.sy, pc.sw, pc.sh,
         cx - dispW/2, cy - dispH, dispW, dispH);
