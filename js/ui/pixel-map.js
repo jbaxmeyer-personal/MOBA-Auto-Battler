@@ -21,7 +21,7 @@
   };
 
   // Tile units: how many map units each 16px tileset tile covers in the terrain texture
-  var TILE_MAP_UNITS = 4;
+  var TILE_MAP_UNITS = 2;
 
   // ── Decoration tree config (Decorations.png: 256x256, 16x16 grid) ──────────
   // 4 large trees in the bottom half — approximate pixel positions
@@ -37,9 +37,13 @@
   // tree2.png (192x224): 3 cols x 2 rows, each sprite ~64x112
   // Display size is fixed in canvas pixels regardless of camera zoom
   var PC_TREES = [
-    { img:'tree1', sx:  0, sy:  0, sw: 92, sh:128, dispW:36, dispH:48 }, // green A
-    { img:'tree1', sx: 92, sy:  0, sw: 92, sh:128, dispW:36, dispH:48 }, // green B
-    { img:'tree2', sx:  0, sy:  0, sw: 64, sh:112, dispW:30, dispH:44 }, // model 2
+    { img:'tree1', sx:  0, sy:  0, sw: 92, sh:128, dispW:64, dispH:88 }, // green A
+    { img:'tree1', sx: 92, sy:  0, sw: 92, sh:128, dispW:64, dispH:88 }, // green B
+    { img:'tree1', sx:184, sy:  0, sw: 92, sh:128, dispW:60, dispH:82 }, // green C
+    { img:'tree2', sx:  0, sy:  0, sw: 64, sh:112, dispW:52, dispH:76 }, // model 2A
+    { img:'tree2', sx: 64, sy:  0, sw: 64, sh:112, dispW:52, dispH:76 }, // model 2B
+    { img:'tree3', sx:  0, sy:  0, sw: 80, sh:104, dispW:56, dispH:72 }, // model 3A
+    { img:'tree3', sx: 80, sy:  0, sw: 80, sh:104, dispW:56, dispH:72 }, // model 3B
   ];
 
   // ── Champion → sprite mapping ─────────────────────────────────────────────
@@ -75,9 +79,10 @@
   var _forestTrees = [];
   var _lastTime = 0;
 
-  // Camera (map units)
-  var cam = { x: 75, y: 150, w: 150, h: 100 };
-  var camTargetX = 75, camTargetY = 150;
+  // Camera (map units) — zoomed in like TFM2 (shows ~1/4 of map)
+  var cam = { x: 110, y: 120, w: 80, h: 53 };
+  var camTargetX = 110, camTargetY = 120;
+  var _camSmoothX = 110, _camSmoothY = 120; // doubly-smoothed to kill jitter
 
   function m2c(mx, my) {
     return {
@@ -213,18 +218,18 @@
 
   function _buildForestTrees() {
     _forestTrees = [];
-    var spacing = 20;
-    for (var my = 20; my < 280; my += spacing) {
-      for (var mx = 20; mx < 280; mx += spacing) {
+    var spacing = 16;
+    for (var my = 10; my < 290; my += spacing) {
+      for (var mx = 10; mx < 290; mx += spacing) {
         var ttype = (typeof getTileType === 'function') ? getTileType(mx, my) : 4;
         if (ttype !== 4 && ttype !== 5) continue;
-        var jx = (_hash(mx, my)       / 255 - 0.5) * spacing * 0.75;
-        var jy = (_hash(mx+200,my+200) / 255 - 0.5) * spacing * 0.75;
+        var jx = (_hash(mx, my)       / 255 - 0.5) * spacing * 0.8;
+        var jy = (_hash(mx+200,my+200) / 255 - 0.5) * spacing * 0.8;
         var tx = mx + jx, ty = my + jy;
         var tt2 = (typeof getTileType === 'function') ? getTileType(Math.round(tx),Math.round(ty)) : 4;
         if (tt2 === 0||tt2===1||tt2===2||tt2===3) continue;
-        var variant = _hash(mx*3, my*7) % 3;         // which PC tree
-        var sz      = 0.7 + (_hash(mx+50, my+50)/255)*0.5;
+        var variant = _hash(mx*3, my*7) % PC_TREES.length;
+        var sz      = 0.75 + (_hash(mx+50, my+50)/255)*0.5;
         _forestTrees.push({mx:tx, my:ty, variant:variant, sz:sz});
       }
     }
@@ -274,9 +279,11 @@
     });
     _rings = live;
 
-    // Camera lerp
-    cam.x += (camTargetX - cam.x) * 0.08;
-    cam.y += (camTargetY - cam.y) * 0.08;
+    // Camera lerp — double-smoothed to eliminate jitter
+    _camSmoothX += (camTargetX - _camSmoothX) * 0.06;
+    _camSmoothY += (camTargetY - _camSmoothY) * 0.06;
+    cam.x += (_camSmoothX - cam.x) * 0.08;
+    cam.y += (_camSmoothY - cam.y) * 0.08;
     cam.x = Math.max(0, Math.min(MAP_SIZE - cam.w, cam.x));
     cam.y = Math.max(0, Math.min(MAP_SIZE - cam.h, cam.y));
   }
@@ -307,7 +314,7 @@
       var t = _forestTrees[i];
       var cp = m2c(t.mx, t.my);
       var cx = Math.round(cp.x), cy = Math.round(cp.y);
-      if (cx < -60 || cx > CANVAS_W+60 || cy < -80 || cy > CANVAS_H+20) continue;
+      if (cx < -100 || cx > CANVAS_W+100 || cy < -120 || cy > CANVAS_H+20) continue;
 
       var pc = PC_TREES[t.variant % PC_TREES.length];
       var img = ASSETS[pc.img];
@@ -350,9 +357,23 @@
 
       _drawAgent(ctx, ag, cx, cy, now);
 
+      // Name label (above HP bar)
+      if (ag.champName) {
+        var label = ag.champName.length > 10 ? ag.champName.slice(0,9)+'.' : ag.champName;
+        ctx.font = 'bold 10px sans-serif';
+        var lw = ctx.measureText(label).width;
+        var lx = cx - lw/2, ly = cy - 62;
+        // Dark background pill
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(lx-3, ly-10, lw+6, 12);
+        ctx.fillStyle = ag.isDead ? '#666' : ag.teamColor;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, cx, ly);
+      }
+
       // HP bar
-      var barW = 28, barH = 3;
-      var barX = cx - barW/2, barY = cy - 26;
+      var barW = 44, barH = 5;
+      var barX = cx - barW/2, barY = cy - 62 + 3;
       ctx.fillStyle = '#111';
       ctx.fillRect(barX, barY, barW, barH);
       if (!ag.isDead && ag.hp > 0) {
@@ -360,17 +381,10 @@
         ctx.fillStyle = pct > 0.5 ? '#4caf50' : pct > 0.25 ? '#ff9800' : '#f44336';
         ctx.fillRect(barX, barY, Math.round(barW*pct), barH);
       }
-      // Team color dot
-      ctx.fillStyle = ag.teamColor;
-      ctx.fillRect(cx-2, barY-4, 4, 4);
-
-      // Name label
-      if (ag.champName) {
-        ctx.font = 'bold 9px monospace';
-        ctx.fillStyle = ag.isDead ? '#555' : ag.teamColor;
-        ctx.textAlign = 'center';
-        ctx.fillText(ag.champName.length > 9 ? ag.champName.slice(0,8)+'.' : ag.champName, cx, barY - 5);
-      }
+      // 1px border
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
     });
     ctx.textAlign = 'left';
   }
@@ -412,14 +426,23 @@
     if (!sheet) {
       // Fallback circle
       ctx.fillStyle = ag.isDead ? '#555' : ag.teamColor;
-      ctx.beginPath(); ctx.arc(cx, cy-8, 8, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy-8, 12, 0, Math.PI*2); ctx.fill();
       return;
     }
 
+    // Drop shadow ellipse so sprite looks grounded
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 4, dispW * 0.28, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.imageSmoothingEnabled = false;
 
-    // Display size (scale from 32x32 to canvas pixels)
-    var dispW = 32, dispH = 32; // canvas pixels
+    // Display size — 56px so characters are clearly visible at zoomed-in view
+    var dispW = 56, dispH = 56;
     var drawX = cx - dispW/2;
     var drawY = cy - dispH;
 
@@ -511,11 +534,14 @@
       if (!ag.isDead) { sx+=ag.mx; sy+=ag.my; cnt++; }
     }
     if (cnt > 0) {
-      camTargetX = sx/cnt - cam.w/2;
-      camTargetY = sy/cnt - cam.h/2;
+      var newTX = sx/cnt - cam.w/2;
+      var newTY = sy/cnt - cam.h/2;
+      newTX = Math.max(0, Math.min(MAP_SIZE-cam.w, newTX));
+      newTY = Math.max(0, Math.min(MAP_SIZE-cam.h, newTY));
+      // Blend target slowly so sudden respawns don't yank the camera
+      camTargetX += (newTX - camTargetX) * 0.15;
+      camTargetY += (newTY - camTargetY) * 0.15;
     }
-    camTargetX = Math.max(0, Math.min(MAP_SIZE-cam.w, camTargetX));
-    camTargetY = Math.max(0, Math.min(MAP_SIZE-cam.h, camTargetY));
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -535,8 +561,10 @@
     function _init() {
       _terrainTex = _buildTerrainTexture();
       _buildForestTrees();
-      cam.x = Math.max(0, Math.min(MAP_SIZE-cam.w, SPAWN_BLUE.x - cam.w/2));
-      cam.y = Math.max(0, Math.min(MAP_SIZE-cam.h, SPAWN_BLUE.y - cam.h/2));
+      // Start camera on mid-lane center
+      cam.x = Math.max(0, Math.min(MAP_SIZE-cam.w, 150 - cam.w/2));
+      cam.y = Math.max(0, Math.min(MAP_SIZE-cam.h, 150 - cam.h/2));
+      _camSmoothX = cam.x; _camSmoothY = cam.y;
       camTargetX = cam.x; camTargetY = cam.y;
       if (!_running) {
         _running = true;
