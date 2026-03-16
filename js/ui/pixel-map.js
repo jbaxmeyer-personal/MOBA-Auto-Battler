@@ -8,20 +8,20 @@
   var TICK_MS_BASE = 2000;
 
   // ── Tile config (Tileset.png: 128x240, 8x15 grid of 16x16 tiles) ──────────
-  // Adjust these pixel coords if tiles look wrong
+  // Sampled pixel coords — verified against actual PNG center pixels
   var TC = {
-    grass:   { sx:  0, sy:   0 },  // bright green grass (row 0, col 0)
-    grass2:  { sx: 16, sy:   0 },  // grass variant
-    dirt:    { sx: 64, sy: 128 },  // brown dirt path
-    dirt2:   { sx: 80, sy: 128 },  // dirt variant
-    forest:  { sx:  0, sy:  16 },  // dark forest fill
-    dforest: { sx:  0, sy:  32 },  // deep forest
-    stone:   { sx: 96, sy: 128 },  // stone (base areas)
-    water:   { sx:  0, sy: 192 },  // water
+    grass:   { sx:  0, sy:   0 },  // #a3b315 bright yellow-green (row0,col0)
+    grass2:  { sx: 16, sy:   0 },  // #a3b315 variant (row0,col1)
+    dirt:    { sx: 64, sy: 144 },  // #a4612b brown path (row9,col4) — was sy:128 = transparent!
+    dirt2:   { sx:112, sy: 144 },  // #7a3f20 darker brown (row9,col7)
+    forest:  { sx:  0, sy:  16 },  // #70801a dark green (row1,col0)
+    dforest: { sx:  0, sy:  32 },  // #70801a dark green variant (row2,col0)
+    stone:   { sx: 16, sy: 160 },  // #4c3034 dark stone for bases (row10,col1)
+    water:   { sx:  0, sy: 192 },  // #14ad82 teal water (row12,col0)
   };
 
   // Tile units: how many map units each 16px tileset tile covers in the terrain texture
-  var TILE_MAP_UNITS = 8;
+  var TILE_MAP_UNITS = 4;
 
   // ── Decoration tree config (Decorations.png: 256x256, 16x16 grid) ──────────
   // 4 large trees in the bottom half — approximate pixel positions
@@ -182,6 +182,10 @@
     oc.width = size; oc.height = size;
     var ctx  = oc.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+
+    // Pre-fill with base green so transparent tiles don't show as black
+    ctx.fillStyle = '#a3b315';
+    ctx.fillRect(0, 0, size, size);
 
     for (var ty = 0; ty < size; ty += tpu) {
       for (var tx = 0; tx < size; tx += tpu) {
@@ -420,21 +424,24 @@
     var drawY = cy - dispH;
 
     // Horizontal flip for left direction
+    // ctx.scale(-1,1) mirrors x, so draw at -(drawX+dispW) to keep same screen position
     if (ag.dir === 'left') {
       ctx.save();
-      ctx.translate(cx*2, 0);
       ctx.scale(-1, 1);
+      ctx.drawImage(sheet, sx, sy, sw, sh, -(drawX + dispW), drawY, dispW, dispH);
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = ag.teamColor;
+      ctx.fillRect(-(drawX + dispW), drawY, dispW, dispH);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    } else {
+      ctx.drawImage(sheet, sx, sy, sw, sh, drawX, drawY, dispW, dispH);
+      // Team color overlay tint (10% opacity colored rect)
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = ag.teamColor;
+      ctx.fillRect(drawX, drawY, dispW, dispH);
+      ctx.globalAlpha = 1;
     }
-
-    ctx.drawImage(sheet, sx, sy, sw, sh, drawX, drawY, dispW, dispH);
-
-    // Team color overlay tint (10% opacity colored rect)
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = ag.teamColor;
-    ctx.fillRect(drawX, drawY, dispW, dispH);
-    ctx.globalAlpha = 1;
-
-    if (ag.dir === 'left') ctx.restore();
   }
 
   function _renderRings(ctx) {
@@ -562,12 +569,15 @@
           var ny = typeof pos.y === 'number' ? pos.y : ag.my;
           var moved = Math.abs(nx-ag.mx)>0.5 || Math.abs(ny-ag.my)>0.5;
 
-          // Direction
+          // Direction — only update when movement is substantial to avoid flicker
           var dx = nx-ag.mx, dy = ny-ag.my;
-          if (Math.abs(dx)>Math.abs(dy)) {
-            ag.dir = dx < 0 ? 'left' : 'right';
-          } else {
-            ag.dir = dy < 0 ? 'up' : 'down';
+          var dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist > 3) {
+            if (Math.abs(dx) > Math.abs(dy)) {
+              ag.dir = dx < 0 ? 'left' : 'right';
+            } else {
+              ag.dir = dy < 0 ? 'up' : 'down';
+            }
           }
 
           ag.prevX = ag.mx; ag.prevY = ag.my;
