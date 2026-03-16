@@ -217,7 +217,7 @@
     // Compute display aspect ratio
     const rect = svg.getBoundingClientRect();
     const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
-    const zoomH = 90;
+    const zoomH = 200;
     const zoomW = zoomH * aspect;
     const vx = Math.max(0, Math.min(300 - zoomW, c.x - zoomW / 2));
     const vy = Math.max(0, Math.min(300 - zoomH, c.y - zoomH / 2));
