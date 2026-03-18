@@ -289,11 +289,11 @@ func _build_terrain() -> void:
 	for py in range(MAP_SIZE):
 		for px in range(MAP_SIZE):
 			var ttype := _get_tile_type(float(px), float(py))
-			# Three octaves of noise for smooth, natural variation
-			var hf  := float(_hash_tile(px, py)) / 255.0
-			var hm  := float(_hash_tile((px >> 3) * 17 + 3, (py >> 3) * 13 + 7)) / 255.0
-			var hx  := float(_hash_tile((px >> 5) * 11 + 5, (py >> 5) * 19 + 2)) / 255.0
-			var n   := hf * 0.25 + hm * 0.45 + hx * 0.30  # 0.0 – 1.0
+			# Three octaves of noise — use & 0xFF to keep values in 0-255 range
+			var hf  := float(_hash_tile(px, py) & 0xFF) / 255.0
+			var hm  := float(_hash_tile((px >> 3) * 17 + 3, (py >> 3) * 13 + 7) & 0xFF) / 255.0
+			var hx  := float(_hash_tile((px >> 5) * 11 + 5, (py >> 5) * 19 + 2) & 0xFF) / 255.0
+			var n   := hf * 0.25 + hm * 0.45 + hx * 0.30  # guaranteed 0.0 – 1.0
 
 			var r : float; var g : float; var b : float
 			match ttype:
@@ -678,6 +678,8 @@ func _create_champion_node(side: String, role: String, champ_data: Dictionary) -
 	node.set_meta("prev_y", iy)
 	node.set_meta("next_x", ix)
 	node.set_meta("next_y", iy)
+	# Blue team faces right (toward map center), red faces left — stable default
+	node.set_meta("facing_right", side == "blue")
 
 	champions_node.add_child(node)
 	champ_nodes[side + "_" + role] = node
@@ -776,12 +778,19 @@ func _apply_tick(idx: int) -> void:
 			if not is_dead:
 				var dx : float = nx - prev_x
 				var dy : float = ny_ - prev_y
-				var is_moving : bool = (absf(dx) + absf(dy)) > 1.5
+				var dist : float = absf(dx) + absf(dy)
+				var is_moving : bool = dist > 2.0
+
+				# Only flip facing when clearly moving horizontally (threshold=5)
+				# This prevents wiggling when standing still or moving vertically
+				if absf(dx) > 5.0:
+					var face_right : bool = dx > 0.0
+					node.set_meta("facing_right", face_right)
+
+				var facing_right : bool = node.get_meta("facing_right", true) as bool
+				sprite.scale.x = absf(sprite.scale.x) * (1.0 if facing_right else -1.0)
+
 				if is_moving:
-					# Left/right only — use horizontal component primarily,
-					# fall back to direction of travel if mostly vertical
-					var face_right : bool = dx >= 0.0
-					sprite.scale.x = absf(sprite.scale.x) * (1.0 if face_right else -1.0)
 					if sprite.animation != "run_right":
 						sprite.play("run_right")
 				else:
