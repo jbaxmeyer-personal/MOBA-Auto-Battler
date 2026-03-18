@@ -346,11 +346,12 @@ func _build_terrain() -> void:
 # ─── Trees ────────────────────────────────────────────────────────────────────
 
 func _build_trees() -> void:
-	var asset_base := _get_asset_base()
+	# Trees disabled — terrain focus first
 	trees_node = Node2D.new()
-	trees_node.z_index = 0
 	add_child(trees_node)
+	return
 
+	var asset_base := _get_asset_base()
 	# Collect [texture, region_x, region_y, region_w, region_h] tuples
 	var variants : Array = []
 
@@ -563,45 +564,26 @@ func _load_sprite_frames(sprite_key: String) -> SpriteFrames:
 		var ph_tex := ImageTexture.create_from_image(ph_img)
 		frames.add_frame("idle", ph_tex)
 
-	# Run animation
+	# Run animation — left/right only (run_right + flip scale.x for left)
+	# Row 1 (y=32) of the run sheet: cols 0-5=walk_left, cols 6-11=walk_right
 	var run_img := Image.new()
 	if run_img.load(sprite_dir + sprite_key + "-run.png") == OK:
 		var run_tex := ImageTexture.create_from_image(run_img)
-
-		frames.add_animation("run_down")
-		frames.set_animation_loop("run_down", true)
-		frames.set_animation_speed("run_down", 8.0)
-		for i in range(6):
-			var atlas := AtlasTexture.new()
-			atlas.atlas = run_tex
-			atlas.region = Rect2(i * 32, 0, 32, 32)
-			frames.add_frame("run_down", atlas)
-
-		frames.add_animation("run_up")
-		frames.set_animation_loop("run_up", true)
-		frames.set_animation_speed("run_up", 8.0)
-		for i in range(6):
-			var atlas := AtlasTexture.new()
-			atlas.atlas = run_tex
-			atlas.region = Rect2((i + 6) * 32, 0, 32, 32)
-			frames.add_frame("run_up", atlas)
-
 		frames.add_animation("run_right")
 		frames.set_animation_loop("run_right", true)
-		frames.set_animation_speed("run_right", 8.0)
+		frames.set_animation_speed("run_right", 10.0)
 		for i in range(6):
 			var atlas := AtlasTexture.new()
 			atlas.atlas = run_tex
 			atlas.region = Rect2((i + 6) * 32, 32, 32, 32)
 			frames.add_frame("run_right", atlas)
 	else:
-		for anim_name in ["run_down", "run_up", "run_right"]:
-			frames.add_animation(anim_name)
-			frames.set_animation_loop(anim_name, true)
-			frames.set_animation_speed(anim_name, 6.0)
-			var n := frames.get_frame_count("idle")
-			for fi in range(n):
-				frames.add_frame(anim_name, frames.get_frame_texture("idle", fi))
+		frames.add_animation("run_right")
+		frames.set_animation_loop("run_right", true)
+		frames.set_animation_speed("run_right", 6.0)
+		var n := frames.get_frame_count("idle")
+		for fi in range(n):
+			frames.add_frame("run_right", frames.get_frame_texture("idle", fi))
 
 	# Death animation (optional)
 	var death_img := Image.new()
@@ -813,16 +795,15 @@ func _apply_tick(idx: int) -> void:
 				var dy : float = ny_ - prev_y
 				var is_moving : bool = (absf(dx) + absf(dy)) > 1.5
 				if is_moving:
-					if absf(dy) > absf(dx):
-						sprite.play("run_down" if dy > 0.0 else "run_up")
-					elif dx > 0.0:
-						sprite.scale.x = absf(sprite.scale.x)
-						sprite.play("run_right")
-					else:
-						sprite.scale.x = -absf(sprite.scale.x)
+					# Left/right only — use horizontal component primarily,
+					# fall back to direction of travel if mostly vertical
+					var face_right : bool = dx >= 0.0
+					sprite.scale.x = absf(sprite.scale.x) * (1.0 if face_right else -1.0)
+					if sprite.animation != "run_right":
 						sprite.play("run_right")
 				else:
-					sprite.play("idle")
+					if sprite.animation != "idle":
+						sprite.play("idle")
 
 	# HUD update
 	_update_hud(tick_data)
